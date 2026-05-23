@@ -22,3 +22,9 @@ Thumbs.db
 # Caché de herramientas (pytest, mypy, etc)
 .pytest_cache/
 .mypy_cache/
+
+# Cache de herramientas actualizadas
+.ruff_cache/
+.pytest_cache/
+.coverage
+htmlcov/
