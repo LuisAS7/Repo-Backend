@@ -1,0 +1,1 @@
+# Archivo principal para unificar todos los endpoints de FastAPI

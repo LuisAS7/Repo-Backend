@@ -1,0 +1,24 @@
+# Entornos virtuales
+venv/
+env/
+.venv/
+
+# Variables de entorno (¡Súper importante!)
+.env
+
+# Archivos compilados de Python
+__pycache__/
+*.py[cod]
+*$py.class
+
+# Logs y bases de datos locales (por si acaso)
+*.log
+*.sqlite3
+
+# Herramientas de sistema operativo
+.DS_Store
+Thumbs.db
+
+# Caché de herramientas (pytest, mypy, etc)
+.pytest_cache/
+.mypy_cache/

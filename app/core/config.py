@@ -1,0 +1,1 @@
+# Archivo donde se definen las configuraciones de la aplicación, como la conexión a la base de datos, variables de entorno, etc.

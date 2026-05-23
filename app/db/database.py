@@ -1,0 +1,1 @@
+# Archivo donde se define la conexión a la base de datos y se crean las tablas necesarias para la aplicación.

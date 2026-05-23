@@ -1,0 +1,1 @@
+# Esquemas de Pydantic para la validación de datos en las rutas de FastAPI, como los esquemas para usuarios, autenticación, etc.
