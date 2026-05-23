@@ -1,0 +1,14 @@
+# Normalizar todos los archivos de texto a LF (formato Unix/Linux)
+* text=auto eol=lf
+
+# Excepciones para archivos que SÍ necesitan formato Windows
+*.bat text eol=crlf
+*.cmd text eol=crlf
+
+# Archivos binarios (para que Git no intente cambiarles el salto de línea)
+*.png binary
+*.jpg binary
+*.jpeg binary
+*.gif binary
+*.ico binary
+*.pdf binary
