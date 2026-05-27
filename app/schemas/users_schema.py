@@ -10,7 +10,7 @@ from pydantic import EmailStr, Field
 
 from app.models.users import StaffRole
 
-from .base_schema import BaseSchema
+from .base_schema import BaseSchema, NameStr
 
 # REUSABLE TYPES
 PasswordStr = Annotated[str, Field(min_length=8, max_length=128, pattern=r"^(?=.*[A-Za-z])(?=.*\d).+$")]
@@ -18,7 +18,7 @@ PasswordStr = Annotated[str, Field(min_length=8, max_length=128, pattern=r"^(?=.
 
 # SPECIALTY SCHEMAS
 class SpecialtyBase(BaseSchema):
-    name: str = Field(..., min_length=2, max_length=100)
+    name: NameStr
     description: str | None = None
 
 
@@ -51,8 +51,8 @@ class DoctorProfileResponse(DoctorProfileBase):
 
 # STAFF SCHEMAS
 class StaffBase(BaseSchema):
-    first_name: str = Field(..., min_length=2, max_length=50)
-    last_name: str = Field(..., min_length=2, max_length=50)
+    first_name: NameStr
+    last_name: NameStr
     email: EmailStr
     role: StaffRole
     is_active: bool = True
@@ -68,8 +68,8 @@ class StaffCreate(StaffBase):
 class StaffUpdate(BaseSchema):
     """Schema for partial updates to staff member"""
 
-    first_name: str | None = Field(None, min_length=2, max_length=50)
-    last_name: str | None = Field(None, min_length=2, max_length=50)
+    first_name: NameStr | None = Field(None, min_length=2, max_length=50)
+    last_name: NameStr | None = Field(None, min_length=2, max_length=50)
     email: EmailStr | None = None
     role: StaffRole | None = None
     is_active: bool | None = None

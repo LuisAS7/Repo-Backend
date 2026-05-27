@@ -9,13 +9,13 @@ from pydantic import EmailStr, Field, field_validator
 
 from app.models.patients import BloodType, Gender
 
-from .base_schema import BaseSchema
+from .base_schema import BaseSchema, NameStr, PhoneStr
 from .users_schema import PasswordStr
 
 
 # CATALOG SCHEMAS (Allergies & Diseases)
 class CatalogBase(BaseSchema):
-    name: str = Field(..., min_length=2, max_length=100)
+    name: NameStr
 
 
 class AllergyResponse(CatalogBase):
@@ -58,8 +58,8 @@ class PatientAccountResponse(BaseSchema):
 # CORE PATIENT SCHEMAS
 class PatientBase(BaseSchema):
     document_number: str = Field(..., min_length=5, max_length=50, pattern=r"^[A-Za-z0-9\-]+$")
-    first_name: str = Field(..., min_length=2, max_length=100)
-    last_name: str = Field(..., min_length=2, max_length=100)
+    first_name: NameStr
+    last_name: NameStr
     birth_date: date
 
     @field_validator("birth_date")
@@ -68,11 +68,11 @@ class PatientBase(BaseSchema):
         if v > date.today():
             raise ValueError("Birth date cannot be in the future")
         if v.year < 1900:
-            raise ValueError("Birth date cannot be before 1900")
+            raise ValueError("Birth date cannot be valid")
         return v
 
     gender: Gender | None = None
-    phone: str | None = Field(None, pattern=r"^\+?[0-9\s\-]{7,20}$")
+    phone: PhoneStr | None = None
     email: EmailStr | None = None
 
 
@@ -89,11 +89,11 @@ class PatientCreate(PatientBase):
 class PatientUpdate(BaseSchema):
     """Partial update schema for patient demographic data"""
 
-    first_name: str | None = Field(None, min_length=2, max_length=100)
-    last_name: str | None = Field(None, min_length=2, max_length=100)
+    first_name: NameStr | None = Field(None, min_length=2, max_length=100)
+    last_name: NameStr | None = Field(None, min_length=2, max_length=100)
     birth_date: date | None = None
     gender: Gender | None = None
-    phone: str | None = Field(None, pattern=r"^\+?[0-9\s\-]{7,20}$")
+    phone: PhoneStr | None = None
     email: EmailStr | None = None
 
 
