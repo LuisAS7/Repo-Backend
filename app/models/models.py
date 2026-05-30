@@ -1,1 +1,0 @@
-# Archivo donde se guardan los modelos de datos de la aplicación, como los modelos de SQLAlchemy para la base de datos y los modelos Pydantic para la validación de datos en las rutas de FastAPI.
