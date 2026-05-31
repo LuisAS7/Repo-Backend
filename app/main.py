@@ -4,10 +4,18 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.deps import get_db
 from app.api.errors import setup_exception_handlers
+from app.api.v1.api_router import api_router
 
 app = FastAPI(title="ValSync API", version="1.0.0")
 
 setup_exception_handlers(app)
+
+app.include_router(api_router, prefix="/api/v1")
+
+
+@app.get("/")
+def read_root():
+    return {"message": "Welcome to the ValSync API!"}
 
 
 @app.get("/health", tags=["Health"])
