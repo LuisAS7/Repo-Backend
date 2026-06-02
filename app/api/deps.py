@@ -120,7 +120,7 @@ class RoleChecker:
         self.allowed_roles = allowed_roles
 
     def __call__(self, current_user: Staff = Depends(get_current_user)) -> Staff:
-        # Verifica si el rol del usuario que inició sesión está en la lista permitida
+        # Checks if the logged-in user's role is in the allowed list
         if current_user.role not in self.allowed_roles:
             raise HTTPException(
                 status_code=status.HTTP_403_FORBIDDEN,
