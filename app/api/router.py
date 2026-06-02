@@ -16,10 +16,9 @@ This ensures every endpoint in the router requires a valid JWT token
 without having to repeat the dependency in each individual route handler.
 """
 
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter
 
 from app.api.auth_router import router as auth_router
-from app.api.deps import get_current_user
 
 api_router = APIRouter()
 
