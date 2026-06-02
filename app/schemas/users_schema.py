@@ -83,3 +83,15 @@ class StaffResponse(StaffBase):
     created_at: datetime
     updated_at: datetime
     doctor_profile: DoctorProfileResponse | None = None
+
+# AUTH SCHEMAS
+class LoginRequest(BaseSchema):
+    """Schema for login credentials"""
+    email: EmailStr
+    password: str
+
+
+class TokenResponse(BaseSchema):
+    """Schema for JWT token response"""
+    access_token: str
+    token_type: str = "bearer"
