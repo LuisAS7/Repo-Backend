@@ -13,7 +13,7 @@ from app.models.users import StaffRole
 from .base_schema import BaseSchema, NameStr
 
 # REUSABLE TYPES
-PasswordStr = Annotated[str, Field(min_length=8, max_length=128, pattern=r"^(?=.*[A-Za-z])(?=.*\d).+$")]
+PasswordStr = Annotated[str, Field(min_length=8, max_length=128)]
 
 
 # SPECIALTY SCHEMAS
