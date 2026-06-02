@@ -10,7 +10,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
 from app.core.exceptions import EmailAlreadyExistsError, InvalidDoctorProfileError, UserNotFoundError
-from app.core.security import hash_password
+from app.core.security import hash_password, verify_password
 from app.models.users import DoctorProfile, Staff, StaffRole
 from app.schemas.users_schema import StaffCreate, StaffUpdate
 
@@ -106,3 +106,15 @@ async def update_staff(session: AsyncSession, staff_id: UUID, staff_update: Staf
             setattr(staff, key, value)
 
     return await get_staff_by_id(session, staff_id)
+
+async def authenticate_user(session: AsyncSession, email: str, password: str) -> Staff | None:
+    """
+    Verifies email and password credentials.
+    Returns the Staff object if valid, or None if credentials are incorrect.
+    """
+    staff = await get_staff_by_email(session, email)
+    if not staff:
+        return None
+    if not verify_password(password, staff.password_hash):
+        return None
+    return staff
