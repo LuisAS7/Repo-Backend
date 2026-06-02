@@ -6,6 +6,9 @@ class Settings(BaseSettings):
     DATABASE_URL: str
     ALEMBIC_DATABASE_URL: str
 
+    # CORS: list of allowed origins for frontend clients
+    CORS_ORIGINS: list[str] = ["http://localhost:3000", "http://localhost:5173"]
+
     model_config = SettingsConfigDict(
         env_file=".env",
         extra="ignore",

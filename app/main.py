@@ -1,15 +1,25 @@
 from fastapi import Depends, FastAPI
+from fastapi.middleware.cors import CORSMiddleware
 from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.deps import get_db
 from app.api.errors import setup_exception_handlers
 from app.api.v1.api_router import api_router
+from app.core.config import settings
 
 app = FastAPI(title="ValSync API", version="1.0.0")
 
-setup_exception_handlers(app)
+# Configure CORS to allow requests from frontend clients (React dev and Vercel)
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=settings.CORS_ORIGINS,
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
 
+setup_exception_handlers(app)
 app.include_router(api_router, prefix="/api/v1")
 
 
@@ -26,5 +36,4 @@ async def health_check():
 @app.get("/health/db")
 async def database_health(db: AsyncSession = Depends(get_db)):
     await db.execute(text("SELECT 1"))
-
     return {"status": "healthy", "database": "connected"}
