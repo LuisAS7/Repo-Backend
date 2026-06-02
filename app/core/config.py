@@ -6,8 +6,13 @@ class Settings(BaseSettings):
     DATABASE_URL: str
     ALEMBIC_DATABASE_URL: str
 
-    # CORS: list of allowed origins for frontend clients
-    CORS_ORIGINS: list[str] = ["http://localhost:3000", "http://localhost:5173"]
+    # CORS: allowed origins for frontend clients (local dev, portal and landing)
+    CORS_ORIGINS: list[str] = [
+        "http://localhost:3000",
+        "http://localhost:5173",
+        "https://val-care-frontend.vercel.app",
+        "https://69f3d9433982532a8ff5fbde--valsync.netlify.app",
+    ]
 
     model_config = SettingsConfigDict(
         env_file=".env",
