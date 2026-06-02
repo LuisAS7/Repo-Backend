@@ -15,7 +15,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.core.exceptions import UserNotFoundError
 from app.core.security import verify_access_token
 from app.db.database import get_db
-from app.models.users import Staff
+from app.models.users import Staff, StaffRole
 from app.services.user_service import get_staff_by_id
 
 # ---------------------------------------------------------------------------
@@ -104,3 +104,27 @@ async def get_current_user(
         )
 
     return staff
+
+# ---------------------------------------------------------------------------
+# Authorization dependencies (RBAC)
+# ---------------------------------------------------------------------------
+class RoleChecker:
+    """
+    FastAPI dependency that enforces Role-Based Access Control (RBAC).
+
+    Validates if the currently authenticated user possesses one of the allowed
+    roles required to interact with the route.
+    """
+
+    def __init__(self, allowed_roles: list[StaffRole]):
+        self.allowed_roles = allowed_roles
+
+    def __call__(self, current_user: Staff = Depends(get_current_user)) -> Staff:
+        # Verifica si el rol del usuario que inició sesión está en la lista permitida
+        if current_user.role not in self.allowed_roles:
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="You do not have the required permissions to perform this action",
+            )
+
+        return current_user
