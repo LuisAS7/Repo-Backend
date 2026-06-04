@@ -3,17 +3,36 @@ Pydantic schemas for Staff, Speciality, and Doctor Profiles
 """
 
 from datetime import datetime
-from typing import Annotated
 from uuid import UUID
 
-from pydantic import EmailStr, Field
+from pydantic import EmailStr, Field, field_validator
 
 from app.models.users import StaffRole
 
 from .base_schema import BaseSchema, NameStr
 
-# REUSABLE TYPES
-PasswordStr = Annotated[str, Field(min_length=8, max_length=128, pattern=r"^(?=.*[A-Za-z])(?=.*\d).+$")]
+MIN_PASSWORD_LENGTH = 8
+MAX_PASSWORD_LENGTH = 72
+
+
+# Password validation function to enforce complexity rules on both create and update operations
+def validate_password_rules(password: str) -> str:
+    if len(password) < MIN_PASSWORD_LENGTH:
+        raise ValueError(f"Password must be at least {MIN_PASSWORD_LENGTH} characters")
+
+    if len(password) > MAX_PASSWORD_LENGTH:
+        raise ValueError(f"Password cannot exceed {MAX_PASSWORD_LENGTH} characters")
+
+    if not any(c.isalpha() for c in password):
+        raise ValueError("Password must contain at least one letter")
+
+    if not any(c.isdigit() for c in password):
+        raise ValueError("Password must contain at least one number")
+
+    if not any(not c.isalnum() for c in password):
+        raise ValueError("Password must contain at least one special character")
+
+    return password
 
 
 # SPECIALTY SCHEMAS
@@ -61,8 +80,13 @@ class StaffBase(BaseSchema):
 class StaffCreate(StaffBase):
     """Schema for creating a new staff member. Includes password field"""
 
-    password: PasswordStr
+    password: str
     doctor_profile: DoctorProfileBase | None = None
+
+    @field_validator("password")
+    @classmethod
+    def validate_password(cls, value: str) -> str:
+        return validate_password_rules(value)
 
 
 class StaffUpdate(BaseSchema):
@@ -73,7 +97,15 @@ class StaffUpdate(BaseSchema):
     email: EmailStr | None = None
     role: StaffRole | None = None
     is_active: bool | None = None
-    password: PasswordStr | None = None
+    password: str | None = None
+
+    @field_validator("password")
+    @classmethod
+    def validate_password(cls, value: str | None) -> str | None:
+        if value is None:
+            return value
+
+        return validate_password_rules(value)
 
 
 class StaffResponse(StaffBase):

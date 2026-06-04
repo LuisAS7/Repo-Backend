@@ -24,7 +24,11 @@ async def get_staff_by_email(session: AsyncSession, email: str) -> Staff | None:
 
 async def get_staff_by_id(session: AsyncSession, staff_id: UUID) -> Staff:
     """Retrieves a staff member eagerly loading their profile"""
-    stmt = select(Staff).options(selectinload(Staff.doctor_profile)).where(Staff.id == staff_id)
+    stmt = (
+        select(Staff)
+        .options(selectinload(Staff.doctor_profile).selectinload(DoctorProfile.specialty))
+        .where(Staff.id == staff_id)
+    )
     result = await session.execute(stmt)
     staff = result.scalar_one_or_none()
 
@@ -55,8 +59,8 @@ async def create_staff(session: AsyncSession, staff_create: StaffCreate) -> Staf
     staff_data["password_hash"] = hash_password(staff_create.password)
     new_staff = Staff(**staff_data)
 
-    # Use a transaction block to ensure atomicity, and flush to get the ID for the profile
-    async with session.begin():
+    # Database Transaction: Add staff and optionally doctor profile, ensuring rollback on failure
+    try:
         session.add(new_staff)
         await session.flush()  # Generates new_staff.id securely
 
@@ -64,7 +68,14 @@ async def create_staff(session: AsyncSession, staff_create: StaffCreate) -> Staf
             profile_data = staff_create.doctor_profile.model_dump()
             session.add(DoctorProfile(staff_id=new_staff.id, **profile_data))
 
-    return await get_staff_by_id(session, new_staff.id)
+        new_staff_id = new_staff.id  # Capture the generated ID for later retrieval
+
+        await session.commit()  # Safely commit the transaction if everything is fine
+    except Exception:
+        await session.rollback()  # If any error occurs, rollback to maintain data integrity
+        raise
+
+    return await get_staff_by_id(session, new_staff_id)
 
 
 async def get_all_active_staff(session: AsyncSession, skip: int = 0, limit: int = 50) -> list[Staff]:
@@ -76,7 +87,7 @@ async def get_all_active_staff(session: AsyncSession, skip: int = 0, limit: int 
 
     stmt = (
         select(Staff)
-        .options(selectinload(Staff.doctor_profile))
+        .options(selectinload(Staff.doctor_profile).selectinload(DoctorProfile.specialty))
         .where(Staff.is_active.is_(True))
         .order_by(Staff.created_at.desc())  # Stable pagination
         .offset(skip)
@@ -101,8 +112,13 @@ async def update_staff(session: AsyncSession, staff_id: UUID, staff_update: Staf
     if "password" in update_data:
         update_data["password_hash"] = hash_password(update_data.pop("password"))
 
-    async with session.begin():
+    # Apply updates and commit within a transaction block to ensure data integrity
+    try:
         for key, value in update_data.items():
             setattr(staff, key, value)
+        await session.commit()
+    except Exception:
+        await session.rollback()
+        raise
 
     return await get_staff_by_id(session, staff_id)

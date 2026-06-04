@@ -10,7 +10,7 @@ from pydantic import EmailStr, Field, field_validator
 from app.models.patients import BloodType, Gender
 
 from .base_schema import BaseSchema, NameStr, PhoneStr
-from .users_schema import PasswordStr
+from .users_schema import validate_password_rules
 
 
 # CATALOG SCHEMAS (Allergies & Diseases)
@@ -44,7 +44,12 @@ class PatientAccountCreate(BaseSchema):
     """Credentials required to enable patient self-service portal access"""
 
     email: EmailStr
-    password: PasswordStr
+    password: str
+
+    @field_validator("password")
+    @classmethod
+    def validate_password(cls, value: str) -> str:
+        return validate_password_rules(value)
 
 
 class PatientAccountResponse(BaseSchema):
