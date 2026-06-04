@@ -10,7 +10,12 @@ from sqlalchemy import and_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
-from app.core.exceptions import AppointmentNotFoundError, DoubleBookingError, PastAppointmentError
+from app.core.exceptions import (
+    AppointmentNotFoundError,
+    BaseBusinessException,
+    DoubleBookingError,
+    PastAppointmentError,
+)
 from app.models.appointments import Appointment, AppointmentStatus, Consultation
 from app.schemas.appointments_schema import AppointmentCreate
 
@@ -69,9 +74,14 @@ async def create_appointment(session: AsyncSession, appointment_create: Appointm
     appointment_data = appointment_create.model_dump()
     new_appointment = Appointment(**appointment_data)
 
-    async with session.begin():
+    try:
         session.add(new_appointment)
-        await session.flush()  # Ensure new_appointment.id is generated before commit
+        await session.commit()  # Commit to generate the ID for the new appointment
+    except Exception as e:
+        await session.rollback()
+        if isinstance(e, BaseBusinessException):
+            raise
+        raise e
 
     return await get_appointment_by_id(session, new_appointment.id)
 
@@ -84,7 +94,11 @@ async def get_all_appointments(session: AsyncSession, skip: int = 0, limit: int 
 
     stmt = (
         select(Appointment)
-        .options(selectinload(Appointment.triage))
+        .options(
+            selectinload(Appointment.triage),
+            selectinload(Appointment.consultation).selectinload(Consultation.prescriptions),
+            selectinload(Appointment.consultation).selectinload(Consultation.diagnoses),
+        )
         .order_by(Appointment.scheduled_date.desc(), Appointment.scheduled_time.desc())
         .offset(skip)
         .limit(safe_limit)
