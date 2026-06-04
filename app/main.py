@@ -2,7 +2,9 @@ from fastapi import Depends, FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.security import HTTPBearer
 from sqlalchemy import text
-from app.api.deps import get_db, AsyncSession
+from sqlalchemy.ext.asyncio import AsyncSession 
+
+from app.api.deps import get_db
 from app.api.errors import setup_exception_handlers
 from app.api.v1.api_router import api_router
 from app.api.auth_router import router as auth_router  # Import JWT authentication router
@@ -28,6 +30,7 @@ setup_exception_handlers(app)
 # Register system routers
 app.include_router(auth_router, prefix="/api/v1")  # Include authentication under v1 prefix
 app.include_router(api_router, prefix="/api/v1")
+
 
 @app.get("/")
 def read_root():

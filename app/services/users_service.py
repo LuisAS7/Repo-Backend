@@ -123,6 +123,7 @@ async def update_staff(session: AsyncSession, staff_id: UUID, staff_update: Staf
 
     return await get_staff_by_id(session, staff_id)
 
+
 async def authenticate_user(session: AsyncSession, email: str, password: str) -> Staff | None:
     """
     Verifies email and password credentials.
