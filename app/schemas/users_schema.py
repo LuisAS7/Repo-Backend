@@ -9,7 +9,7 @@ from pydantic import EmailStr, Field, field_validator
 
 from app.models.users import StaffRole
 
-from .base_schema import BaseSchema, NameStr
+from .base_schema import BaseSchema, NameStr, Annotated
 
 MIN_PASSWORD_LENGTH = 8
 MAX_PASSWORD_LENGTH = 72
@@ -33,6 +33,8 @@ def validate_password_rules(password: str) -> str:
         raise ValueError("Password must contain at least one special character")
 
     return password
+# REUSABLE TYPES
+PasswordStr = Annotated[str, Field(min_length=8, max_length=128)]
 
 
 # SPECIALTY SCHEMAS
@@ -115,3 +117,15 @@ class StaffResponse(StaffBase):
     created_at: datetime
     updated_at: datetime
     doctor_profile: DoctorProfileResponse | None = None
+
+# AUTH SCHEMAS
+class LoginRequest(BaseSchema):
+    """Schema for login credentials"""
+    email: EmailStr
+    password: str
+
+
+class TokenResponse(BaseSchema):
+    """Schema for JWT token response"""
+    access_token: str
+    token_type: str = "bearer"

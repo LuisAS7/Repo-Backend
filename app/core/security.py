@@ -1,13 +1,18 @@
 """
-Security module for handling password hashing, authentication, and future JWT token management
+Security module for handling password hashing, authentication, and JWT token management
 """
 
+from datetime import datetime, timedelta, timezone
+
+import jwt
 from passlib.context import CryptContext
 
-__all__ = ["verify_password", "hash_password", "pwd_context"]
+from app.core.config import settings
+
+__all__ = ["verify_password", "hash_password", "pwd_context", "create_access_token", "verify_access_token"]
 
 # Work factor for the hashing algorithm
-BCRYPT_ROUNDS = 12  # 12 rounds is a good balance between security and performance for most applications.
+BCRYPT_ROUNDS = 12
 
 pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto", bcrypt__rounds=BCRYPT_ROUNDS)
 
@@ -21,9 +26,23 @@ def verify_password(plain_password: str, hashed_password: str) -> bool:
 
 def hash_password(password: str) -> str:
     """
-    Generates a secure hash of the given plain text password using the configured hashing algorithm and work factor
+    Generates a secure hash of the given plain text password
     """
     return pwd_context.hash(password)
 
 
-# TODO: Implement JWT token generation and verification functions for future authentication features
+def create_access_token(data: dict) -> str:
+    """
+    Creates a signed JWT access token with an expiration time
+    """
+    to_encode = data.copy()
+    expire = datetime.now(timezone.utc) + timedelta(minutes=settings.ACCESS_TOKEN_EXPIRE_MINUTES)
+    to_encode.update({"exp": expire})
+    return jwt.encode(to_encode, settings.SECRET_KEY, algorithm=settings.ALGORITHM)
+
+
+def verify_access_token(token: str) -> dict:
+    """
+    Verifies and decodes a JWT token. Raises an exception if invalid or expired
+    """
+    return jwt.decode(token, settings.SECRET_KEY, algorithms=[settings.ALGORITHM])
