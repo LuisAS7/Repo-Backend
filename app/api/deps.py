@@ -18,7 +18,7 @@ from app.core.security import verify_access_token
 from app.db.database import AsyncSessionLocal
 from app.models.users import Staff
 # 💡 Nota: Si tu archivo de servicios usa "users_service" (en plural), cámbialo aquí abajo.
-from app.services.user_service import get_staff_by_id
+from app.services.users_service import get_staff_by_id
 
 # ---------------------------------------------------------------------------
 # Database Dependency
