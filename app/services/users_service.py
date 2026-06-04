@@ -24,7 +24,11 @@ async def get_staff_by_email(session: AsyncSession, email: str) -> Staff | None:
 
 async def get_staff_by_id(session: AsyncSession, staff_id: UUID) -> Staff:
     """Retrieves a staff member eagerly loading their profile"""
-    stmt = select(Staff).options(selectinload(Staff.doctor_profile)).where(Staff.id == staff_id)
+    stmt = (
+        select(Staff)
+        .options(selectinload(Staff.doctor_profile).selectinload(DoctorProfile.specialty))
+        .where(Staff.id == staff_id)
+    )
     result = await session.execute(stmt)
     staff = result.scalar_one_or_none()
 
@@ -83,7 +87,7 @@ async def get_all_active_staff(session: AsyncSession, skip: int = 0, limit: int 
 
     stmt = (
         select(Staff)
-        .options(selectinload(Staff.doctor_profile))
+        .options(selectinload(Staff.doctor_profile).selectinload(DoctorProfile.specialty))
         .where(Staff.is_active.is_(True))
         .order_by(Staff.created_at.desc())  # Stable pagination
         .offset(skip)
