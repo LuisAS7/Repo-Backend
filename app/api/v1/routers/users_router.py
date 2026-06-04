@@ -8,13 +8,18 @@ from uuid import UUID
 
 from fastapi import APIRouter, Depends, Query, status
 from sqlalchemy.ext.asyncio import AsyncSession
+from fastapi.security import HTTPBearer
 
 from app.api.deps import get_db
 from app.schemas.users_schema import StaffCreate, StaffResponse, StaffUpdate
 from app.services import users_service
 
+
+# Initialize the security scheme to enable the global "Authorize" lock in Swagger
+security_scheme = HTTPBearer()
+
 # Create a router instance for staff-related endpoints
-router = APIRouter(prefix="/staff", tags=["Staff & Doctors"])
+router = APIRouter(prefix="/staff", tags=["Staff & Doctors"],dependencies=[Depends(security_scheme)])
 
 
 @router.post(
