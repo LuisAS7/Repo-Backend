@@ -8,6 +8,7 @@ fix = true
 [tool.ruff.lint]
 # Habilitamos validaciones de errores (E, F) y el ordenamiento de imports (I)
 select = ["E", "F", "I", "UP", "B"]
+ignore = ["B008"]
 
 [tool.ruff.lint.per-file-ignores]
 "alembic/versions/*.py" = ["E501"]

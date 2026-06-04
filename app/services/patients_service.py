@@ -10,6 +10,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
 from app.core.exceptions import (
+    BaseBusinessException,
     DocumentNumberAlreadyExistsError,
     EmailAlreadyExistsError,
     InvalidCatalogReferenceError,
@@ -72,13 +73,33 @@ async def create_patient(session: AsyncSession, patient_create: PatientCreate) -
     patient_data = patient_create.model_dump(
         exclude={"account", "medical_background", "allergy_ids", "chronic_disease_ids"}
     )
-    new_patient = Patient(**patient_data)
 
     # Use a transaction block to ensure all-or-nothing behavior
-    async with session.begin():
+    try:
+        # Handle Many-to-Many Catalogs (Allergies)
+        found_allergies = []
+        if patient_create.allergy_ids:
+            stmt_allergies = select(Allergy).where(Allergy.id.in_(patient_create.allergy_ids))
+            allergies_result = await session.execute(stmt_allergies)
+            found_allergies = list(allergies_result.scalars().all())
+
+            if len(found_allergies) != len(set(patient_create.allergy_ids)):
+                raise InvalidCatalogReferenceError("Allergies")
+
+        # Handle Many-to-Many Catalogs (Chronic Diseases)
+        found_chronic_diseases = []
+        if patient_create.chronic_disease_ids:
+            stmt_diseases = select(ChronicDisease).where(ChronicDisease.id.in_(patient_create.chronic_disease_ids))
+            diseases_result = await session.execute(stmt_diseases)
+            found_chronic_diseases = list(diseases_result.scalars().all())
+
+            if len(found_chronic_diseases) != len(set(patient_create.chronic_disease_ids)):
+                raise InvalidCatalogReferenceError("Chronic Diseases")
+
+        new_patient = Patient(**patient_data, allergies=found_allergies, chronic_diseases=found_chronic_diseases)
+
         session.add(new_patient)
-        # Flush to get the new_patient.id immediately
-        await session.flush()
+        await session.flush()  # Flush to generate new_patient.id for related records
 
         # Handle ValCare Account Creation
         if patient_create.account:
@@ -93,25 +114,12 @@ async def create_patient(session: AsyncSession, patient_create: PatientCreate) -
             new_background = MedicalBackground(patient_id=new_patient.id, **background_data)
             session.add(new_background)
 
-        # Handle Many-to-Many Catalogs (Allergies)
-        if patient_create.allergy_ids:
-            stmt_allergies = select(Allergy).where(Allergy.id.in_(patient_create.allergy_ids))
-            allergies_result = await session.execute(stmt_allergies)
-            found_allergies = list(allergies_result.scalars().all())
-
-            if len(found_allergies) != len(set(patient_create.allergy_ids)):
-                raise InvalidCatalogReferenceError("Allergies")
-            new_patient.allergies = found_allergies
-
-        # Handle Many-to-Many Catalogs (Chronic Diseases)
-        if patient_create.chronic_disease_ids:
-            stmt_diseases = select(ChronicDisease).where(ChronicDisease.id.in_(patient_create.chronic_disease_ids))
-            diseases_result = await session.execute(stmt_diseases)
-            found_chronic_diseases = list(diseases_result.scalars().all())
-
-            if len(found_chronic_diseases) != len(set(patient_create.chronic_disease_ids)):
-                raise InvalidCatalogReferenceError("Chronic Diseases")
-            new_patient.chronic_diseases = found_chronic_diseases
+        await session.commit()  # Commit the transaction if everything is fine
+    except Exception as e:
+        await session.rollback()  # Rollback on any error to maintain data integrity
+        if isinstance(e, BaseBusinessException):
+            raise
+        raise
 
     # Fetch the fully loaded object using the dedicated query
     return await get_patient_by_id(session, new_patient.id)
@@ -127,7 +135,12 @@ async def get_all_patients(session: AsyncSession, skip: int = 0, limit: int = 50
 
     stmt = (
         select(Patient)
-        .options(selectinload(Patient.account), selectinload(Patient.medical_background))
+        .options(
+            selectinload(Patient.account),
+            selectinload(Patient.medical_background),
+            selectinload(Patient.allergies),
+            selectinload(Patient.chronic_diseases),
+        )
         .order_by(Patient.created_at.desc())
         .offset(skip)
         .limit(safe_limit)
