@@ -9,7 +9,8 @@ from uuid import UUID
 from fastapi import APIRouter, Depends, Query, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.api.deps import get_db
+from app.api.deps import RoleChecker, get_current_user, get_db
+from app.models.users import Staff, StaffRole
 from app.schemas.users_schema import StaffCreate, StaffResponse, StaffUpdate
 from app.services import users_service
 
@@ -18,9 +19,16 @@ router = APIRouter(prefix="/staff", tags=["Staff & Doctors"])
 
 
 @router.post(
-    "/", response_model=StaffResponse, status_code=status.HTTP_201_CREATED, summary="Create a new staff member"
+    "/", 
+    response_model=StaffResponse, 
+    status_code=status.HTTP_201_CREATED, 
+    summary="Create a new staff member"
 )
-async def create_staff(staff_in: StaffCreate, session: AsyncSession = Depends(get_db)):
+async def create_staff(
+    staff_in: StaffCreate, 
+    session: AsyncSession = Depends(get_db),
+    current_user: Staff = Depends(RoleChecker([StaffRole.ADMIN]))
+):
     """
     Registers a new staff member
     If the role is DOCTOR, a nested doctor_profile is required
@@ -29,9 +37,16 @@ async def create_staff(staff_in: StaffCreate, session: AsyncSession = Depends(ge
 
 
 @router.get(
-    "/{staff_id}", response_model=StaffResponse, status_code=status.HTTP_200_OK, summary="Get a staff member by ID"
+    "/{staff_id}", 
+    response_model=StaffResponse, 
+    status_code=status.HTTP_200_OK, 
+    summary="Get a staff member by ID"
 )
-async def get_staff(staff_id: UUID, session: AsyncSession = Depends(get_db)):
+async def get_staff(
+    staff_id: UUID, 
+    session: AsyncSession = Depends(get_db),
+    current_user: Staff = Depends(get_current_user)
+):
     """
     Retrieves a specific staff member by their UUID
     """
@@ -48,6 +63,7 @@ async def get_all_active_staff(
     skip: int = Query(0, ge=0, description="Number of records to skip for pagination"),
     limit: int = Query(50, ge=1, le=100, description="Maximum number of records to return"),
     session: AsyncSession = Depends(get_db),
+    current_user: Staff = Depends(get_current_user)
 ):
     """
     Retrieves a paginated list of all active staff members
@@ -61,7 +77,12 @@ async def get_all_active_staff(
     status_code=status.HTTP_200_OK,
     summary="Partially update a staff member's information",
 )
-async def update_staff(staff_id: UUID, staff_update: StaffUpdate, session: AsyncSession = Depends(get_db)):
+async def update_staff(
+    staff_id: UUID, 
+    staff_update: StaffUpdate, 
+    session: AsyncSession = Depends(get_db),
+    current_user: Staff = Depends(RoleChecker([StaffRole.ADMIN]))
+):
     """
     Partially updates a staff member's information
     """
