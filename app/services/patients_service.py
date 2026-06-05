@@ -18,12 +18,12 @@ from app.core.exceptions import (
 )
 from app.core.security import hash_password
 from app.models.patients import Allergy, ChronicDisease, MedicalBackground, Patient, PatientAccount
-from app.schemas.patients_schema import PatientCreate
+from app.schemas.patients_schema import PatientCreate, PatientUpdate
 
 
 async def get_patient_by_document(session: AsyncSession, document_number: str) -> Patient | None:
     """Retrieves a patient by their unique document number"""
-    stmt = select(Patient).where(Patient.document_number == document_number)
+    stmt = select(Patient).where(Patient.document_number == document_number).where(Patient.is_active == True)
     result = await session.execute(stmt)
     return result.scalar_one_or_none()
 
@@ -42,6 +42,7 @@ async def get_patient_by_id(session: AsyncSession, patient_id: UUID) -> Patient:
             selectinload(Patient.chronic_diseases),
         )
         .where(Patient.id == patient_id)
+        .where(Patient.is_active == True)
     )
     result = await session.execute(stmt)
     patient = result.scalar_one_or_none()
@@ -141,9 +142,71 @@ async def get_all_patients(session: AsyncSession, skip: int = 0, limit: int = 50
             selectinload(Patient.allergies),
             selectinload(Patient.chronic_diseases),
         )
+        .where(Patient.is_active == True)
         .order_by(Patient.created_at.desc())
         .offset(skip)
         .limit(safe_limit)
     )
     result = await session.execute(stmt)
     return list(result.scalars().all())
+
+# ---------------------------------------------------------------------------
+# NEW: Dynamic Partial Update (PATCH)
+# ---------------------------------------------------------------------------
+async def update_patient(session: AsyncSession, patient_id: UUID, patient_in: PatientUpdate) -> Patient:
+    """
+    Partially updates an existing patient record.
+    Utilizes Pydantic's exclude_unset=True to only update modified fields.
+    """
+    # 1. Reuse get_patient_by_id to guarantee they are active and exist
+    db_patient = await get_patient_by_id(session, patient_id)
+    
+    # 2. Extract fields explicitly sent by the user
+    update_data = patient_in.model_dump(exclude_unset=True)
+    
+    try:
+        # 3. Dynamically map attributes onto the SQLAlchemy object
+        for field, value in update_data.items():
+            setattr(db_patient, field, value)
+            
+        await session.commit()
+        await session.refresh(db_patient)
+        return db_patient
+    except Exception as e:
+        await session.rollback()
+        raise e
+
+
+# ---------------------------------------------------------------------------
+# NEW: Soft Delete Toggle
+# ---------------------------------------------------------------------------
+async def update_patient_status(session: AsyncSession, patient_id: UUID, is_active: bool) -> Patient:
+    """
+    Modifies the operational availability of a patient.
+    Bypasses standard active filters to allow record reactivation.
+    """
+    # Eagerly load fields so that the final return payload maps correctly to PatientResponse
+    stmt = (
+        select(Patient)
+        .options(
+            selectinload(Patient.account),
+            selectinload(Patient.medical_background),
+            selectinload(Patient.allergies),
+            selectinload(Patient.chronic_diseases),
+        )
+        .where(Patient.id == patient_id)
+    )
+    result = await session.execute(stmt)
+    db_patient = result.scalar_one_or_none()
+    
+    if not db_patient:
+        raise PatientNotFoundError(identifier=str(patient_id))
+        
+    try:
+        db_patient.is_active = is_active
+        await session.commit()
+        await session.refresh(db_patient)
+        return db_patient
+    except Exception as e:
+        await session.rollback()
+        raise e
