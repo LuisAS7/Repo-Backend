@@ -1,7 +1,9 @@
 import enum
 import uuid
 from datetime import date, time
+from uuid import UUID
 from decimal import Decimal
+
 
 from sqlalchemy import (
     Column,
@@ -33,7 +35,7 @@ class AppointmentStatus(str, enum.Enum):
     WAITING = "WAITING"
     READY = "READY"
     COMPLETED = "COMPLETED"
-    CANCELED = "CANCELED"
+    CANCELED = "CANCELLED"
 
 
 class AppointmentOrigin(str, enum.Enum):
@@ -125,8 +127,8 @@ class Appointment(Base, TimestampMixin):
     # Relationships
     patient: Mapped["Patient"] = relationship()
     doctor: Mapped["Staff"] = relationship()
-    triage: Mapped["Triage"] = relationship(back_populates="appointment", uselist=False)
-    consultation: Mapped["Consultation"] = relationship(back_populates="appointment", uselist=False)
+    triage: Mapped["Triage | None"] = relationship(back_populates="appointment", uselist=False)
+    consultation: Mapped["Consultation | None"] = relationship(back_populates="appointment", uselist=False)
 
 
 class Triage(Base):
@@ -134,17 +136,26 @@ class Triage(Base):
 
     __tablename__ = "triage"
 
-    id: Mapped[uuid_pk]
-    appointment_id: Mapped[uuid.UUID] = mapped_column(
+    id: Mapped[uuid_pk] 
+    
+    appointment_id: Mapped[UUID] = mapped_column(
         ForeignKey("appointment.id", ondelete="CASCADE"), unique=True, nullable=False
     )
-    nurse_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("staff.id"), nullable=False)
+    
+    # 🌟 CORREGIDO: Mapeo nativo de SQLAlchemy 2.0 con Mapped[UUID]
+    nurse_id: Mapped[UUID] = mapped_column(
+        ForeignKey("staff.id"), nullable=False
+    )
 
     weight_kg: Mapped[Decimal | None] = mapped_column(Numeric(5, 2))
     height_cm: Mapped[Decimal | None] = mapped_column(Numeric(5, 2))
     bmi: Mapped[Decimal | None] = mapped_column(Numeric(4, 2))
     blood_pressure: Mapped[str | None] = mapped_column(String(20))
     temperature_c: Mapped[Decimal | None] = mapped_column(Numeric(4, 1))
+
+    heart_rate_bpm: Mapped[int | None] = mapped_column(Integer)
+    respiratory_rate_rpm: Mapped[int | None] = mapped_column(Integer)
+
     notes: Mapped[str | None] = mapped_column(Text)
 
     created_at: Mapped[created_at_dt]
@@ -160,6 +171,10 @@ class Consultation(Base, TimestampMixin):
     id: Mapped[uuid_pk]
     appointment_id: Mapped[uuid.UUID] = mapped_column(
         ForeignKey("appointment.id", ondelete="CASCADE"), unique=True, nullable=False
+    )
+
+    doctor_id: Mapped[UUID] = mapped_column(
+        ForeignKey("staff.id"), nullable=False
     )
 
     subjective: Mapped[str | None] = mapped_column(Text)

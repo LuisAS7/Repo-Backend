@@ -129,3 +129,33 @@ class TokenResponse(BaseSchema):
     """Schema for JWT token response"""
     access_token: str
     token_type: str = "bearer"
+
+# ---------------------------------------------------------------------------
+# NEW: Staff Status Update Schema (Soft Delete)
+# ---------------------------------------------------------------------------
+class StaffStatusUpdate(BaseSchema):
+    """Schema specific for toggling a staff member's active state"""
+
+    is_active: bool
+
+
+class StaffResponse(StaffBase):
+    """Schema used when returning staff data to the frontend. Excludes password"""
+
+    id: UUID
+    created_at: datetime
+    updated_at: datetime
+    doctor_profile: DoctorProfileResponse | None = None
+
+
+# AUTH SCHEMAS
+class LoginRequest(BaseSchema):
+    """Schema for login credentials"""
+    email: EmailStr
+    password: str
+
+
+class TokenResponse(BaseSchema):
+    """Schema for JWT token response"""
+    access_token: str
+    token_type: str = "bearer"

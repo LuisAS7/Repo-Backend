@@ -83,7 +83,7 @@ class TriageBase(BaseSchema):
 
 
 class TriageCreate(TriageBase):
-    nurse_id: UUID
+    nurse_id: UUID | None = None
 
 
 class TriageUpdate(TriageBase):

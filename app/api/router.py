@@ -18,7 +18,7 @@ without having to repeat the dependency in each individual route handler.
 
 from fastapi import APIRouter
 
-from app.api.auth_router import router as auth_router
+from app.api.v1.routers.auth_router import router as auth_router
 
 api_router = APIRouter()
 

@@ -6,12 +6,12 @@ appointments scheduling and retrieval
 
 from uuid import UUID
 
-from fastapi import APIRouter, Depends, Query, status
+from fastapi import APIRouter, Depends, Query, status, Body
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.deps import RoleChecker, get_current_user, get_db
 from app.models.users import Staff, StaffRole
-from app.schemas.appointments_schema import AppointmentCreate, AppointmentResponse
+from app.schemas.appointments_schema import AppointmentCreate, AppointmentResponse, TriageCreate, TriageResponse, ConsultationCreate, ConsultationResponse 
 from app.services import appointments_service
 
 # Create a router instance for appointment-related endpoints
@@ -67,3 +67,64 @@ async def get_all_appointments(
     Retrieves a paginated list of all appointments ordered by date
     """
     return await appointments_service.get_all_appointments(session, skip, limit)
+
+# ---------------------------------------------------------------------------
+# NEW: CLINICAL LIFECYCLE ENDPOINTS
+# ---------------------------------------------------------------------------
+
+@router.patch(
+    "/{appointment_id}/cancel",
+    response_model=AppointmentResponse,
+    status_code=status.HTTP_200_OK,
+    summary="Cancel an appointment",
+)
+async def cancel_appointment(
+    appointment_id: UUID,
+    cancellation_reason: str = Body(..., embed=True),
+    session: AsyncSession = Depends(get_db),
+    current_user: Staff = Depends(RoleChecker([StaffRole.ADMIN, StaffRole.RECEPTIONIST, StaffRole.DOCTOR]))
+):
+    """Cancels an appointment logistically and saves the reason."""
+    return await appointments_service.cancel_appointment(session, appointment_id, cancellation_reason)
+
+
+@router.post(
+    "/{appointment_id}/triage",
+    response_model=TriageResponse,
+    status_code=status.HTTP_201_CREATED,
+    summary="Register patient vital signs (Triage)",
+)
+async def create_triage(
+    appointment_id: UUID,
+    payload: TriageCreate,
+    session: AsyncSession = Depends(get_db),
+    current_user: Staff = Depends(RoleChecker([StaffRole.NURSE, StaffRole.DOCTOR]))
+):
+    """Records vital signs and transitions the appointment to WAITING status."""
+    return await appointments_service.create_triage(
+        session=session, 
+        appointment_id=appointment_id, 
+        triage_in=payload, 
+        nurse_id=current_user.id
+    )
+
+
+@router.post(
+    "/{appointment_id}/consultation",
+    response_model=ConsultationResponse,
+    status_code=status.HTTP_201_CREATED,
+    summary="Conclude a clinical encounter",
+)
+async def create_consultation(
+    appointment_id: UUID,
+    payload: ConsultationCreate,
+    session: AsyncSession = Depends(get_db),
+    current_user: Staff = Depends(RoleChecker([StaffRole.DOCTOR]))
+):
+    """Saves evolution notes, binds diagnoses, and issues prescriptions."""
+    return await appointments_service.create_consultation(
+        session=session,
+        appointment_id=appointment_id,
+        consultation_in=payload,
+        doctor_id=current_user.id
+    )

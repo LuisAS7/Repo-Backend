@@ -37,7 +37,7 @@ async def get_db() -> AsyncGenerator[AsyncSession, None]:
 # `tokenUrl` points to the login endpoint so that OpenAPI's "Authorize" UI
 # knows where to obtain a bearer token. The scheme itself reads the
 # `Authorization: Bearer <token>` header automatically.
-oauth2_scheme = OAuth2PasswordBearer(tokenUrl="/auth/login")
+oauth2_scheme = OAuth2PasswordBearer(tokenUrl="api/v1/auth/swagger-login")
 
 
 # ---------------------------------------------------------------------------
