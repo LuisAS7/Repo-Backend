@@ -17,9 +17,9 @@ It also serves as the core engine for the patient self-management portal (**ValC
 
 The API is deployed and running on Render. You can explore and test the endpoints directly through the interactive Swagger UI interface:
 
-* **🔗 Base URL:** `https://your-valsync-service.onrender.com`
-* **📖 API Documentation (Swagger):** `https://your-valsync-service.onrender.com/docs`
-* **🩺 Health Check:** `https://your-valsync-service.onrender.com/health`
+* **🔗 Base URL:** `https://valsync-api.onrender.com`
+* **📖 API Documentation (Swagger):** `https://valsync-api.onrender.com/docs`
+* **🩺 Health Check:** `https://valsync-api.onrender.com/health`
 
 ---
 
