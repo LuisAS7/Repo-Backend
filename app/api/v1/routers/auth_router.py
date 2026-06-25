@@ -18,43 +18,16 @@ router = APIRouter(prefix="/auth", tags=["Authentication"])
 async def login(credentials: OAuth2PasswordRequestForm = Depends(), db: AsyncSession = Depends(get_db)):
     """
     Authenticates a staff member and returns a JWT access token.
-    Raises 401 if credentials are invalid or user is inactive.
+    Compatible with Swagger UI Form Data and standard API requests.
     """
     staff = await authenticate_user(db, credentials.username, credentials.password)
-
-    if not staff:
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Invalid email or password",
-            headers={"WWW-Authenticate": "Bearer"},
-        )
-
-    if not staff.is_active:
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="User account is inactive",
-            headers={"WWW-Authenticate": "Bearer"},
-        )
-
-    access_token = create_access_token(data={"sub": str(staff.id), "role": staff.role.value})
-
-    return TokenResponse(access_token=access_token, token_type="bearer")
-
-
-# SWAGGER ENDPOINT (For the Authorize button - Consumes Form Data)
-@router.post("/swagger-login", response_model=TokenResponse, include_in_schema=False)
-async def swagger_login(form_data: OAuth2PasswordRequestForm = Depends(), db: AsyncSession = Depends(get_db)):
-    """
-    Special endpoint for Swagger UI OAuth2 authorization (Hidden from docs via include_in_schema=False).
-    """
-    # Swagger sends email inside form_data.username
-    staff = await authenticate_user(db, form_data.username, form_data.password)
 
     if not staff or not staff.is_active:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Invalid credentials or inactive account",
+            detail="Invalid email or password / User account is inactive",
+            headers={"WWW-Authenticate": "Bearer"},
         )
 
     access_token = create_access_token(data={"sub": str(staff.id), "role": staff.role.value})
-    return TokenResponse(access_token=access_token)
+    return TokenResponse(access_token=access_token, token_type="bearer")

@@ -16,8 +16,9 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.core.exceptions import UserNotFoundError
 from app.core.security import verify_access_token
 from app.db.database import AsyncSessionLocal
-from app.models.users import Staff, StaffRole  # 💡 Unificado: Incluye StaffRole para el control de roles
-from app.services.users_service import get_staff_by_id  # 💡 Mantiene el plural corregido
+from app.models.users import Staff, StaffRole
+from app.services.users_service import get_staff_by_id
+
 
 # ---------------------------------------------------------------------------
 # Database Dependency
@@ -37,7 +38,7 @@ async def get_db() -> AsyncGenerator[AsyncSession, None]:
 # `tokenUrl` points to the login endpoint so that OpenAPI's "Authorize" UI
 # knows where to obtain a bearer token. The scheme itself reads the
 # `Authorization: Bearer <token>` header automatically.
-oauth2_scheme = OAuth2PasswordBearer(tokenUrl="api/v1/auth/swagger-login")
+oauth2_scheme = OAuth2PasswordBearer(tokenUrl="api/v1/auth/login")
 
 
 # ---------------------------------------------------------------------------
@@ -53,9 +54,9 @@ async def get_current_user(
 
     Steps performed:
     1. Extract the raw bearer token from the ``Authorization`` header via
-       ``OAuth2PasswordBearer`` (raises 401 automatically if header is absent).
+        ``OAuth2PasswordBearer`` (raises 401 automatically if header is absent).
     2. Decode and verify the token signature and expiration using the
-       application's SECRET_KEY (``verify_access_token``).
+        application's SECRET_KEY (``verify_access_token``).
     3. Extract the ``sub`` claim (staff UUID) from the decoded payload.
     4. Load the corresponding Staff record from the database.
 
@@ -70,37 +71,37 @@ async def get_current_user(
         headers={"WWW-Authenticate": "Bearer"},
     )
 
-    # --- Step 1: Decode & verify the JWT ---
+    # --- Decode & verify the JWT ---
     try:
         payload: dict = verify_access_token(token)
-    except jwt.ExpiredSignatureError:
+    except jwt.ExpiredSignatureError as err:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Token has expired",
             headers={"WWW-Authenticate": "Bearer"},
-        )
-    except jwt.InvalidTokenError:
-        # Covers: invalid signature, malformed token, wrong algorithm, etc.
-        raise credentials_exception
+        ) from err
+    except jwt.InvalidTokenError as err:
+        # Covers invalid signature, malformed token, wrong algorithm, etc.
+        raise credentials_exception from err
 
-    # --- Step 2: Extract the subject claim (staff UUID) ---
+    # --- Extract the subject claim (staff UUID) ---
     sub: str | None = payload.get("sub")
     if sub is None:
         raise credentials_exception
 
     try:
         staff_id = UUID(sub)
-    except ValueError:
+    except ValueError as err:
         # `sub` exists but is not a valid UUID
-        raise credentials_exception
+        raise credentials_exception from err
 
-    # --- Step 3: Fetch the user from the database ---
+    # --- Fetch the user from the database ---
     try:
         staff = await get_staff_by_id(db, staff_id)
-    except UserNotFoundError:
-        raise credentials_exception
+    except UserNotFoundError as err:
+        raise credentials_exception from err
 
-    # --- Step 4: Ensure the account is still active ---
+    # --- Ensure the account is still active ---
     if not staff.is_active:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
@@ -112,8 +113,10 @@ async def get_current_user(
 
 
 # ---------------------------------------------------------------------------
-# Authorization dependencies (RBAC)
+# Role-Based Access Control (RBAC) Dependency
 # ---------------------------------------------------------------------------
+
+
 class RoleChecker:
     """
     FastAPI dependency that enforces Role-Based Access Control (RBAC).
