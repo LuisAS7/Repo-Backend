@@ -11,13 +11,14 @@ from app.core.config import settings
 app = FastAPI(title="ValSync API", version="1.0.0")
 
 # Configure CORS to allow requests from frontend clients (React dev and Vercel)
-app.add_middleware(
-    CORSMiddleware,
-    allow_origins=settings.CORS_ORIGINS,
-    allow_credentials=True,
-    allow_methods=["*"],
-    allow_headers=["*"],
-)
+if settings.CORS_ORIGINS:
+    app.add_middleware(
+        CORSMiddleware,
+        allow_origins=[str(origin).rstrip("/") for origin in settings.CORS_ORIGINS],
+        allow_credentials=True,
+        allow_methods=["*"],
+        allow_headers=["*"],
+    )
 
 # Initialize global exception handlers
 setup_exception_handlers(app)
