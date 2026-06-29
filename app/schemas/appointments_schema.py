@@ -121,7 +121,7 @@ class AppointmentUpdate(BaseSchema):
 class AppointmentResponse(AppointmentBase):
     id: UUID
     patient_id: UUID
-    doctor_id: UUID
+    doctor_id: UUID | None = None
     status: AppointmentStatus
     origin: AppointmentOrigin
     cancellation_reason: ShortReasonStr | None = None
@@ -130,6 +130,12 @@ class AppointmentResponse(AppointmentBase):
 
     triage: TriageResponse | None = None
     consultation: ConsultationResponse | None = None
+
+
+class WalkInCreate(BaseSchema):
+    patient_id: UUID
+    scheduled_date: date
+    reason: ShortReasonStr | None = None
 
 
 # DOCTOR AVAILABILITY SCHEMAS
