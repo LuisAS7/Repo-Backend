@@ -11,11 +11,13 @@ from uuid import UUID
 import jwt
 from fastapi import Depends, HTTPException, status
 from fastapi.security import OAuth2PasswordBearer
+from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.exceptions import UserNotFoundError
 from app.core.security import verify_access_token
 from app.db.database import AsyncSessionLocal
+from app.models.patients import Patient, PatientAccount
 from app.models.users import Staff, StaffRole
 from app.services.users_service import get_staff_by_id
 
@@ -38,7 +40,7 @@ async def get_db() -> AsyncGenerator[AsyncSession, None]:
 # `tokenUrl` points to the login endpoint so that OpenAPI's "Authorize" UI
 # knows where to obtain a bearer token. The scheme itself reads the
 # `Authorization: Bearer <token>` header automatically.
-oauth2_scheme = OAuth2PasswordBearer(tokenUrl="api/v1/auth/login")
+oauth2_scheme = OAuth2PasswordBearer(tokenUrl="/api/v1/auth/login", scheme_name="ValSync (Staff Portal)")
 
 
 # ---------------------------------------------------------------------------
@@ -115,8 +117,6 @@ async def get_current_user(
 # ---------------------------------------------------------------------------
 # Role-Based Access Control (RBAC) Dependency
 # ---------------------------------------------------------------------------
-
-
 class RoleChecker:
     """
     FastAPI dependency that enforces Role-Based Access Control (RBAC).
@@ -137,3 +137,72 @@ class RoleChecker:
             )
 
         return current_user
+
+
+# ---------------------------------------------------------------------------
+# ValCare (Patient) Dependencies
+# ---------------------------------------------------------------------------
+# Create a separate OAuth2 scheme so that the Swagger documentation
+# knows that patients log in at a different endpoint.
+valcare_oauth2_scheme = OAuth2PasswordBearer(tokenUrl="/api/v1/valcare/login", scheme_name="ValCare (Portal Pacientes)")
+
+
+async def get_current_patient(
+    token: str = Depends(valcare_oauth2_scheme),
+    db: AsyncSession = Depends(get_db),
+) -> Patient:
+    """
+    FastAPI dependency that validates a JWT bearer token and returns the
+    authenticated Patient. Ensures that only tokens with the 'PATIENT' role
+    can access ValCare endpoints.
+    """
+    credentials_exception = HTTPException(
+        status_code=status.HTTP_401_UNAUTHORIZED,
+        detail="Could not validate patient credentials",
+        headers={"WWW-Authenticate": "Bearer"},
+    )
+
+    # Decode and verify the JWT
+    try:
+        payload: dict = verify_access_token(token)
+    except jwt.ExpiredSignatureError as err:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Token has expired",
+            headers={"WWW-Authenticate": "Bearer"},
+        ) from err
+    except jwt.InvalidTokenError as err:
+        raise credentials_exception from err
+
+    # Extract claims
+    sub: str | None = payload.get("sub")
+    role: str | None = payload.get("role")
+
+    # Strict validation we block any staff member
+    if sub is None or role != "PATIENT":
+        raise credentials_exception
+
+    try:
+        patient_id = UUID(sub)
+    except ValueError as err:
+        raise credentials_exception from err
+
+    # Fetch the patient account from the database
+    stmt = select(PatientAccount).where(PatientAccount.patient_id == patient_id)
+    account = (await db.execute(stmt)).scalar_one_or_none()
+
+    if not account:
+        raise credentials_exception
+
+    # Fetch the core patient profile
+    stmt_patient = select(Patient).where(Patient.id == patient_id)
+    patient = (await db.execute(stmt_patient)).scalar_one_or_none()
+
+    if not patient or not patient.is_active:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Patient account is inactive or not found",
+            headers={"WWW-Authenticate": "Bearer"},
+        )
+
+    return patient
