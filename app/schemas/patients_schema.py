@@ -101,8 +101,10 @@ class PatientUpdate(BaseSchema):
     phone: PhoneStr | None = None
     email: EmailStr | None = None
 
+
 class PatientStatusUpdate(BaseSchema):
     """Schema for updating a patient's active status"""
+
     is_active: bool
 
 
@@ -110,6 +112,7 @@ class PatientResponse(PatientBase):
     """Comprehensive patient profile returned to the frontend"""
 
     id: UUID
+    is_active: bool
     created_at: datetime
     updated_at: datetime
 

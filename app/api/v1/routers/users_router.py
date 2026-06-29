@@ -19,15 +19,12 @@ router = APIRouter(prefix="/staff", tags=["Staff & Doctors"])
 
 
 @router.post(
-    "/", 
-    response_model=StaffResponse, 
-    status_code=status.HTTP_201_CREATED, 
-    summary="Create a new staff member"
+    "/", response_model=StaffResponse, status_code=status.HTTP_201_CREATED, summary="Create a new staff member"
 )
 async def create_staff(
-    staff_in: StaffCreate, 
+    staff_in: StaffCreate,
     session: AsyncSession = Depends(get_db),
-    current_user: Staff = Depends(RoleChecker([StaffRole.ADMIN]))
+    current_user: Staff = Depends(RoleChecker([StaffRole.ADMIN])),
 ):
     """
     Registers a new staff member
@@ -37,15 +34,21 @@ async def create_staff(
 
 
 @router.get(
-    "/{staff_id}", 
-    response_model=StaffResponse, 
-    status_code=status.HTTP_200_OK, 
-    summary="Get a staff member by ID"
+    "/me", response_model=StaffResponse, status_code=status.HTTP_200_OK, summary="Get current logged-in staff profile"
+)
+async def get_me(current_user: Staff = Depends(get_current_user)):
+    """
+    Retrieves the profile of the currently authenticated staff member.
+    The get_current_user dependency already validates the JWT and fetches the user from the database.
+    """
+    return current_user
+
+
+@router.get(
+    "/{staff_id}", response_model=StaffResponse, status_code=status.HTTP_200_OK, summary="Get a staff member by ID"
 )
 async def get_staff(
-    staff_id: UUID, 
-    session: AsyncSession = Depends(get_db),
-    current_user: Staff = Depends(get_current_user)
+    staff_id: UUID, session: AsyncSession = Depends(get_db), current_user: Staff = Depends(get_current_user)
 ):
     """
     Retrieves a specific staff member by their UUID
@@ -63,7 +66,7 @@ async def get_all_active_staff(
     skip: int = Query(0, ge=0, description="Number of records to skip for pagination"),
     limit: int = Query(50, ge=1, le=100, description="Maximum number of records to return"),
     session: AsyncSession = Depends(get_db),
-    current_user: Staff = Depends(get_current_user)
+    current_user: Staff = Depends(get_current_user),
 ):
     """
     Retrieves a paginated list of all active staff members
@@ -78,10 +81,10 @@ async def get_all_active_staff(
     summary="Partially update a staff member's information",
 )
 async def update_staff(
-    staff_id: UUID, 
-    staff_update: StaffUpdate, 
+    staff_id: UUID,
+    staff_update: StaffUpdate,
     session: AsyncSession = Depends(get_db),
-    current_user: Staff = Depends(RoleChecker([StaffRole.ADMIN]))
+    current_user: Staff = Depends(RoleChecker([StaffRole.ADMIN])),
 ):
     """
     Partially updates a staff member's information

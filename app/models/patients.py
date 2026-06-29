@@ -89,6 +89,7 @@ class Patient(Base, TimestampMixin):
     gender: Mapped[Gender | None] = mapped_column(SQLEnum(Gender, name="gender_enum"))
     phone: Mapped[str | None] = mapped_column(String(50))
     email: Mapped[str_255 | None]
+    is_active: Mapped[bool] = mapped_column(Boolean, default=True, server_default="true")
 
     # Relationships
     account: Mapped["PatientAccount"] = relationship(

@@ -43,6 +43,7 @@ class AppointmentOrigin(str, enum.Enum):
 
     VALSYNC = "VALSYNC"
     VALCARE = "VALCARE"
+    WALK_IN = "WALK_IN"
 
 
 # ASSOCIATION TABLES
@@ -107,7 +108,7 @@ class Appointment(Base, TimestampMixin):
     )
     id: Mapped[uuid_pk]
     patient_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("patient.id"), nullable=False)
-    doctor_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("staff.id"), nullable=False)
+    doctor_id: Mapped[uuid.UUID | None] = mapped_column(ForeignKey("staff.id"), nullable=True)
 
     scheduled_date: Mapped[date] = mapped_column(Date, nullable=False)
     scheduled_time: Mapped[time] = mapped_column(Time, nullable=False)
@@ -126,7 +127,7 @@ class Appointment(Base, TimestampMixin):
 
     # Relationships
     patient: Mapped["Patient"] = relationship()
-    doctor: Mapped["Staff"] = relationship()
+    doctor: Mapped["Staff | None"] = relationship()
     triage: Mapped["Triage | None"] = relationship(back_populates="appointment", uselist=False)
     consultation: Mapped["Consultation | None"] = relationship(back_populates="appointment", uselist=False)
 

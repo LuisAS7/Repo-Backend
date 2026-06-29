@@ -6,6 +6,7 @@ Handles validation of scheduling rules, double booking prevention, and nested da
 from datetime import datetime
 from uuid import UUID
 
+from fastapi import HTTPException, status
 from sqlalchemy import and_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
@@ -16,9 +17,8 @@ from app.core.exceptions import (
     DoubleBookingError,
     PastAppointmentError,
 )
-from fastapi import HTTPException, status
-from app.models.appointments import Appointment, AppointmentStatus, Consultation, DiagnosisCatalog, Prescription, Triage
-from app.schemas.appointments_schema import AppointmentCreate, TriageCreate, ConsultationCreate
+from app.models.appointments import Appointment, AppointmentStatus, AppointmentOrigin, Consultation, DiagnosisCatalog, Prescription
+from app.schemas.appointments_schema import AppointmentCreate, ConsultationCreate, WalkInCreate
 
 
 async def get_appointment_by_id(session: AsyncSession, appointment_id: UUID) -> Appointment:
@@ -107,74 +107,29 @@ async def get_all_appointments(session: AsyncSession, skip: int = 0, limit: int 
     result = await session.execute(stmt)
     return list(result.scalars().all())
 
-# ---------------------------------------------------------------------------
-# NEW: CLINICAL STATE TRANSITIONS & CLINICAL FLOW LOGIC
-# ---------------------------------------------------------------------------
 
 async def cancel_appointment(session: AsyncSession, appointment_id: UUID, reason: str) -> Appointment:
     """
-    Cancels an appointment logistically (Soft Delete) and records the reason.
+    Cancels an appointment logistically (Soft Delete) and records the reason
     """
     stmt = select(Appointment).where(Appointment.id == appointment_id)
     result = await session.execute(stmt)
     appointment = result.scalar_one_or_none()
-    
+
+    if appointment.status in [AppointmentStatus.COMPLETED, AppointmentStatus.CANCELED]:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"Cannot cancel an appointment that is already {appointment.status.value}",
+        )
+
     if not appointment:
         raise AppointmentNotFoundError(identifier=str(appointment_id))
-        
+
     try:
-        appointment.status = AppointmentStatus.CANCELLED
+        appointment.status = AppointmentStatus.CANCELED
         appointment.cancellation_reason = reason
         await session.commit()
         return await get_appointment_by_id(session, appointment_id)
-    except Exception as e:
-        await session.rollback()
-        raise e
-
-
-async def create_triage(session: AsyncSession, appointment_id: UUID, triage_in: TriageCreate, nurse_id: UUID) -> Triage:
-    """
-    Registers patient vital signs and advances appointment status to WAITING.
-    """
-    stmt = select(Appointment).where(Appointment.id == appointment_id)
-    result = await session.execute(stmt)
-    appointment = result.scalar_one_or_none()
-    
-    if not appointment:
-        raise AppointmentNotFoundError(identifier=str(appointment_id))
-    
-    if appointment.status not in [AppointmentStatus.SCHEDULED, AppointmentStatus.READY]:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST, 
-            detail="Appointment is not in a valid state for Triage (Must be SCHEDULED or READY)"
-        )
-
-    # Automatic BMI calculation
-    bmi_calc = None
-    if triage_in.weight_kg and triage_in.height_cm:
-        height_m = float(triage_in.height_cm) / 100
-        bmi_calc = float(triage_in.weight_kg) / (height_m ** 2)
-
-    db_triage = Triage(
-        appointment_id=appointment_id,
-        nurse_id=nurse_id,
-        weight_kg=triage_in.weight_kg,
-        height_cm=triage_in.height_cm,
-        bmi=bmi_calc,
-        blood_pressure=triage_in.blood_pressure,
-        temperature_c=triage_in.temperature_c,
-        heart_rate_bpm=triage_in.heart_rate_bpm,
-        respiratory_rate_rpm=triage_in.respiratory_rate_rpm,
-        notes=triage_in.notes
-    )
-
-    try:
-        session.add(db_triage)
-        # Update status: Move from scheduled to waiting room
-        appointment.status = AppointmentStatus.WAITING
-        await session.commit()
-        await session.refresh(db_triage)
-        return db_triage
     except Exception as e:
         await session.rollback()
         raise e
@@ -184,67 +139,59 @@ async def create_consultation(
     session: AsyncSession, appointment_id: UUID, consultation_in: ConsultationCreate, doctor_id: UUID
 ) -> Consultation:
     """
-    Creates a full consultation with nested prescriptions and diagnoses.
-    Implements the Anti-Greenlet pattern by pre-fetching catalog records.
+    Creates a full consultation with nested prescriptions and diagnoses
+    Implements the Anti-Greenlet pattern by pre-fetching catalog records
     """
     stmt = select(Appointment).where(Appointment.id == appointment_id)
     result = await session.execute(stmt)
     appointment = result.scalar_one_or_none()
-    
+
     if not appointment:
         raise AppointmentNotFoundError(identifier=str(appointment_id))
-        
+
     if appointment.status != AppointmentStatus.WAITING:
         raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST, 
-            detail="Patient must pass through Triage first (Appointment status must be WAITING)"
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Patient must pass through Triage first (Appointment status must be WAITING)",
         )
 
-    # 🚀 STEP 1: Early catalog search (Anti-Greenlet / Lazy Loading prevention)
+    # Early catalog search (Anti-Greenlet / Lazy Loading prevention)
     diag_stmt = select(DiagnosisCatalog).where(DiagnosisCatalog.id.in_(consultation_in.diagnosis_ids))
     diag_result = await session.execute(diag_stmt)
     found_diagnoses = diag_result.scalars().all()
-    
+
     if len(found_diagnoses) != len(consultation_in.diagnosis_ids):
         raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST, 
-            detail="One or more Diagnosis IDs provided do not exist in the catalog"
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="One or more Diagnosis IDs provided do not exist in the catalog",
         )
 
-    # 🚀 STEP 2: Direct Consultation instantiation with M2M relationships mapped in-memory
+    # Direct Consultation instantiation with M2M relationships mapped in-memory
     db_consultation = Consultation(
         appointment_id=appointment_id,
         doctor_id=doctor_id,
-        subjective=consultation_in.clinical_notes,
-        diagnoses=found_diagnoses
+        subjective=consultation_in.subjective,
+        objective=consultation_in.objective,
+        assessment=consultation_in.assessment,
+        plan=consultation_in.plan,
+        diagnoses=found_diagnoses,
     )
 
-    # 🚀 STEP 3: Iteration and nesting of prescriptions within the same unit of work
     for presc in consultation_in.prescriptions:
-        # Attempt to extract duration days or use a safe default
-        duration_days = 7
-        if presc.duration:
-            first_word = presc.duration.split()[0]
-            if first_word.isdigit():
-                duration_days = int(first_word)
-
         db_prescription = Prescription(
-            medication=presc.medication_name,
-            dose=presc.dosage,
+            medication=presc.medication,
+            dose=presc.dose,
             frequency=presc.frequency,
-            duration_days=duration_days,
-            consultation=db_consultation
+            duration_days=presc.duration_days,
+            consultation=db_consultation,
         )
         session.add(db_prescription)
 
     try:
         session.add(db_consultation)
-        # 🚀 STEP 4: Final clinical lifecycle closure
         appointment.status = AppointmentStatus.COMPLETED
-        
-        # 🚀 STEP 5: Atomic global try/commit transaction
         await session.commit()
-        
+
         # Return the consultation safely reloaded using selectinload
         return_stmt = (
             select(Consultation)
@@ -256,3 +203,28 @@ async def create_consultation(
     except Exception as e:
         await session.rollback()
         raise e
+
+
+async def create_walk_in(session: AsyncSession, walk_in_data: WalkInCreate) -> Appointment:
+    """
+    Creates a walk-in appointment without a doctor assigned.
+    Sets status to WAITING directly since the patient is already present.
+    """
+    new_appointment = Appointment(
+        patient_id=walk_in_data.patient_id,
+        doctor_id=None,
+        scheduled_date=walk_in_data.scheduled_date,
+        scheduled_time=datetime.now().time().replace(second=0, microsecond=0),
+        status=AppointmentStatus.WAITING,
+        origin=AppointmentOrigin.WALK_IN,
+        reason=walk_in_data.reason or "Atención de urgencia / Ingreso rápido",
+    )
+
+    try:
+        session.add(new_appointment)
+        await session.commit()
+    except Exception as e:
+        await session.rollback()
+        raise e
+
+    return await get_appointment_by_id(session, new_appointment.id)
