@@ -16,6 +16,7 @@ from app.schemas.appointments_schema import (
     AppointmentResponse,
     ConsultationCreate,
     ConsultationResponse,
+    WalkInCreate
 )
 from app.services import appointments_service
 
@@ -32,7 +33,7 @@ router = APIRouter(prefix="/appointments", tags=["Appointments"])
 async def create_appointment(
     appointment_in: AppointmentCreate,
     session: AsyncSession = Depends(get_db),
-    current_user: Staff = Depends(RoleChecker([StaffRole.ADMIN, StaffRole.NURSE])),
+    current_user: Staff = Depends(RoleChecker([StaffRole.ADMIN, StaffRole.NURSE, StaffRole.RECEPTIONIST])),
 ):
     """
     Schedules a new appointment for a patient with a doctor
@@ -89,6 +90,22 @@ async def cancel_appointment(
     """Cancels an appointment logistically and saves the reason."""
     return await appointments_service.cancel_appointment(session, appointment_id, cancellation_reason)
 
+@router.post(
+    "/walk-in",
+    response_model=AppointmentResponse,
+    status_code=status.HTTP_201_CREATED,
+    summary="Register a walk-in patient",
+)
+async def create_walk_in(
+    walk_in_in: WalkInCreate,
+    session: AsyncSession = Depends(get_db),
+    current_user: Staff = Depends(RoleChecker([StaffRole.ADMIN, StaffRole.RECEPTIONIST])),
+):
+    """
+    Creates an urgent walk-in appointment without a prior schedule.
+    The patient is placed directly in WAITING status without a doctor assigned.
+    """
+    return await appointments_service.create_walk_in(session, walk_in_in)
 
 @router.post(
     "/{appointment_id}/consultation",
