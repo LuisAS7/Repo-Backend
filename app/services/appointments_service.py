@@ -17,8 +17,8 @@ from app.core.exceptions import (
     DoubleBookingError,
     PastAppointmentError,
 )
-from app.models.appointments import Appointment, AppointmentStatus, Consultation, DiagnosisCatalog, Prescription
-from app.schemas.appointments_schema import AppointmentCreate, ConsultationCreate
+from app.models.appointments import Appointment, AppointmentStatus, AppointmentOrigin, Consultation, DiagnosisCatalog, Prescription
+from app.schemas.appointments_schema import AppointmentCreate, ConsultationCreate, WalkInCreate
 
 
 async def get_appointment_by_id(session: AsyncSession, appointment_id: UUID) -> Appointment:
@@ -203,3 +203,28 @@ async def create_consultation(
     except Exception as e:
         await session.rollback()
         raise e
+
+
+async def create_walk_in(session: AsyncSession, walk_in_data: WalkInCreate) -> Appointment:
+    """
+    Creates a walk-in appointment without a doctor assigned.
+    Sets status to WAITING directly since the patient is already present.
+    """
+    new_appointment = Appointment(
+        patient_id=walk_in_data.patient_id,
+        doctor_id=None,
+        scheduled_date=walk_in_data.scheduled_date,
+        scheduled_time=datetime.now().time().replace(second=0, microsecond=0),
+        status=AppointmentStatus.WAITING,
+        origin=AppointmentOrigin.WALK_IN,
+        reason=walk_in_data.reason or "Atención de urgencia / Ingreso rápido",
+    )
+
+    try:
+        session.add(new_appointment)
+        await session.commit()
+    except Exception as e:
+        await session.rollback()
+        raise e
+
+    return await get_appointment_by_id(session, new_appointment.id)
