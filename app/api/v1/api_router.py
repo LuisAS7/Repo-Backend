@@ -5,12 +5,24 @@ Includes all sub-routers for different resource types (e.g. staff, patients, app
 
 from fastapi import APIRouter
 
-from app.api.v1.routers import appointments_router, patients_router, users_router, catalogs_router, triage_router
+from app.api.v1.routers.appointments_router import router as appointments_router
+from app.api.v1.routers.auth_router import router as auth_router
+from app.api.v1.routers.catalogs_router import router as catalogs_router
+from app.api.v1.routers.patients_router import router as patients_router
+from app.api.v1.routers.triage_router import router as triage_router
+from app.api.v1.routers.users_router import router as users_router
+from app.api.v1.routers.valcare_router import router as valcare_router
 
 api_router = APIRouter()
 
-api_router.include_router(users_router.router)
-api_router.include_router(patients_router.router)
-api_router.include_router(catalogs_router.router)
-api_router.include_router(appointments_router.router)
-api_router.include_router(triage_router.router)
+# ── Public routes (no authentication required) ───────────────────────────────
+api_router.include_router(auth_router)
+
+# ── Protected routes ─────────────────────────────────────────────────────────
+api_router.include_router(users_router)
+api_router.include_router(patients_router)
+api_router.include_router(appointments_router)
+api_router.include_router(catalogs_router)
+api_router.include_router(triage_router)
+# ── VALCARE routes ─────────────────────────────────────────────────────────
+api_router.include_router(valcare_router)

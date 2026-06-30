@@ -2,9 +2,8 @@ import uuid
 from datetime import datetime
 from typing import Annotated
 
-from sqlalchemy import String, DateTime, text, MetaData
+from sqlalchemy import DateTime, MetaData, String, Uuid, text
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column
-from sqlalchemy.dialects.postgresql import UUID
 
 # Define a naming convention for indexes and constraints to ensure consistent naming across the database
 POSTGRES_INDEXES_NAMING_CONVENTION = {
@@ -17,26 +16,24 @@ POSTGRES_INDEXES_NAMING_CONVENTION = {
 metadata_obj = MetaData(naming_convention=POSTGRES_INDEXES_NAMING_CONVENTION)
 
 # Define common column types for convenience
-uuid_pk = Annotated[
-    uuid.UUID, 
-    mapped_column(UUID(as_uuid=True), primary_key=True, server_default=text("gen_random_uuid()"))
-]
-created_at_dt = Annotated[
-    datetime, 
-    mapped_column(DateTime(timezone=True), server_default=text("CURRENT_TIMESTAMP"))
-]
+uuid_pk = Annotated[uuid.UUID, mapped_column(Uuid(), primary_key=True, default=uuid.uuid4)]
+created_at_dt = Annotated[datetime, mapped_column(DateTime(timezone=True), server_default=text("CURRENT_TIMESTAMP"))]
 updated_at_dt = Annotated[
-    datetime, 
-    mapped_column(DateTime(timezone=True), server_default=text("CURRENT_TIMESTAMP"), onupdate=text("CURRENT_TIMESTAMP"))
+    datetime,
+    mapped_column(
+        DateTime(timezone=True), server_default=text("CURRENT_TIMESTAMP"), onupdate=text("CURRENT_TIMESTAMP")
+    ),
 ]
 
 # Common column types for convenience
 str_100 = Annotated[str, mapped_column(String(100))]
 str_255 = Annotated[str, mapped_column(String(255))]
 
+
 # BASE AND MIXINS
 class Base(DeclarativeBase):
     metadata = metadata_obj
+
 
 # Mixin to add created_at and updated_at timestamps to models
 class TimestampMixin:
