@@ -4,10 +4,12 @@ from uuid import UUID
 from fastapi import HTTPException, status
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.orm import selectinload
 
 from app.core.security import hash_password, verify_password
 from app.models.appointments import Appointment
 from app.models.patients import Patient, PatientAccount
+from app.models.users import DoctorProfile, Specialty, Staff, StaffRole
 from app.schemas.valcare_schema import ValcareRegisterRequest
 
 logger = logging.getLogger(__name__)
@@ -96,15 +98,96 @@ async def authenticate_patient(session: AsyncSession, email: str, password: str)
     return patient.id
 
 
-async def get_appointments_by_patient(session: AsyncSession, patient_id: UUID) -> list[Appointment]:
+async def get_available_specialties(session: AsyncSession) -> list[dict]:
+    """Returns the catalog of medical specialties for the portal."""
+    stmt = select(Specialty).order_by(Specialty.name)
+    result = await session.execute(stmt)
+    specialties = result.scalars().all()
+    return [
+        {
+            "id": str(specialty.id),
+            "name": specialty.name,
+            "description": specialty.description,
+        }
+        for specialty in specialties
+    ]
+
+
+async def get_available_doctors(session: AsyncSession, specialty_id: UUID | None = None) -> list[dict]:
+    """Returns active doctors, optionally filtered by specialty."""
+    stmt = (
+        select(Staff)
+        .join(Staff.doctor_profile)
+        .options(selectinload(Staff.doctor_profile).selectinload(DoctorProfile.specialty))
+        .where(Staff.role == StaffRole.DOCTOR, Staff.is_active.is_(True))
+    )
+    if specialty_id:
+        stmt = stmt.where(DoctorProfile.specialty_id == specialty_id)
+
+    result = await session.execute(stmt)
+    doctors = result.scalars().all()
+
+    return [
+        {
+            "id": str(doctor.id),
+            "first_name": doctor.first_name,
+            "last_name": doctor.last_name,
+            "full_name": f"{doctor.first_name} {doctor.last_name}".strip(),
+            "specialty_id": str(doctor.doctor_profile.specialty_id) if doctor.doctor_profile else None,
+            "specialty_name": (
+                doctor.doctor_profile.specialty.name
+                if doctor.doctor_profile and doctor.doctor_profile.specialty
+                else None
+            ),
+            "medical_license": doctor.doctor_profile.medical_license if doctor.doctor_profile else None,
+        }
+        for doctor in doctors
+    ]
+
+
+async def get_appointments_by_patient(session: AsyncSession, patient_id: UUID) -> list[dict]:
     """
     Fetches all appointments for a specific patient from the database,
-    sorting them from newest to oldest
+    sorting them from newest to oldest and shaping the payload for the portal.
     """
     stmt = (
         select(Appointment)
+        .options(
+            selectinload(Appointment.doctor).selectinload(Staff.doctor_profile).selectinload(DoctorProfile.specialty)
+        )
         .where(Appointment.patient_id == patient_id)
         .order_by(Appointment.scheduled_date.desc(), Appointment.scheduled_time.desc())
     )
     result = await session.execute(stmt)
-    return list(result.scalars().all())
+    appointments = result.scalars().all()
+
+    status_map = {
+        "SCHEDULED": "pendiente",
+        "WAITING": "pendiente",
+        "READY": "pendiente",
+        "COMPLETED": "confirmada",
+        "CANCELED": "cancelada",
+    }
+
+    return [
+        {
+            "id": str(appointment.id),
+            "scheduled_date": appointment.scheduled_date.isoformat(),
+            "scheduled_time": appointment.scheduled_time.isoformat(),
+            "reason": appointment.reason,
+            "status": status_map.get(appointment.status.value, appointment.status.value.lower()),
+            "doctor_id": str(appointment.doctor_id) if appointment.doctor_id else None,
+            "doctor": (
+                f"{appointment.doctor.first_name} {appointment.doctor.last_name}".strip()
+                if appointment.doctor
+                else "Médico por asignar"
+            ),
+            "specialty": (
+                appointment.doctor.doctor_profile.specialty.name
+                if appointment.doctor and appointment.doctor.doctor_profile and appointment.doctor.doctor_profile.specialty
+                else None
+            ),
+            "created_at": appointment.created_at.isoformat() if appointment.created_at else None,
+        }
+        for appointment in appointments
+    ]

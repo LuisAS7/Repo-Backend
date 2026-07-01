@@ -4,6 +4,8 @@ Exposes public endpoints for registration/login and secured endpoints
 for patients to manage their profiles, medical history, and appointments
 """
 
+from uuid import UUID
+
 from fastapi import APIRouter, Depends, status
 from fastapi.security import OAuth2PasswordRequestForm
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -84,6 +86,25 @@ async def get_patient_appointments(
     ordered chronologically to show their clinical history
     """
     return await valcare_service.get_appointments_by_patient(session, current_patient.id)
+
+
+@router.get("/specialties", status_code=status.HTTP_200_OK, summary="List specialties available for patient booking")
+async def get_patient_specialties(
+    session: AsyncSession = Depends(get_db),
+    current_patient: Patient = Depends(get_current_patient),
+):
+    """Provides the list of medical specialties to the patient portal."""
+    return await valcare_service.get_available_specialties(session)
+
+
+@router.get("/doctors", status_code=status.HTTP_200_OK, summary="List doctors available for patient booking")
+async def get_patient_doctors(
+    specialty_id: UUID | None = None,
+    session: AsyncSession = Depends(get_db),
+    current_patient: Patient = Depends(get_current_patient),
+):
+    """Provides the list of active doctors, optionally filtered by specialty."""
+    return await valcare_service.get_available_doctors(session, specialty_id)
 
 
 @router.post(
