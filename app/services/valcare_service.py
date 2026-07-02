@@ -1,13 +1,14 @@
 import logging
+from datetime import date, datetime, timedelta
 from uuid import UUID
 
 from fastapi import HTTPException, status
-from sqlalchemy import select
+from sqlalchemy import select, and_
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
 from app.core.security import hash_password, verify_password
-from app.models.appointments import Appointment
+from app.models.appointments import Appointment, AppointmentStatus, DoctorAvailability
 from app.models.patients import Patient, PatientAccount
 from app.models.users import DoctorProfile, Specialty, Staff, StaffRole
 from app.schemas.valcare_schema import ValcareRegisterRequest
@@ -96,6 +97,73 @@ async def authenticate_patient(session: AsyncSession, email: str, password: str)
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="This patient account has been deactivated")
 
     return patient.id
+
+
+async def get_available_schedules(
+    session: AsyncSession, doctor_id: UUID, selected_date: date
+) -> list[dict]:
+    """
+    Genera de forma dinámica los slots libres del doctor calculando su disponibilidad
+    semanal y restando las citas que ya se encuentran ocupadas.
+    """
+    # 1. Obtener el día de la semana (SQLAlchemy guarda 1=Lunes, 7=Domingo)
+    # .isoweekday() de Python devuelve justamente 1 para Lunes y 7 para Domingo
+    day_of_week = selected_date.isoweekday()
+
+    # 2. Consultar la disponibilidad configurada para ese día
+    avail_stmt = select(DoctorAvailability).where(
+        and_(
+            DoctorAvailability.doctor_id == doctor_id,
+            DoctorAvailability.day_of_week == day_of_week
+        )
+    )
+    avail_result = await session.execute(avail_stmt)
+    availability = avail_result.scalar_one_or_none()
+
+    # Si el médico no atiende este día de la semana, regresamos lista vacía
+    if not availability:
+        return []
+
+    # 3. Consultar qué citas ya están ocupadas/reservadas para ese médico en esa fecha
+    appt_stmt = select(Appointment.scheduled_time).where(
+        and_(
+            Appointment.doctor_id == doctor_id,
+            Appointment.scheduled_date == selected_date,
+            Appointment.status.in_([
+                AppointmentStatus.SCHEDULED, 
+                AppointmentStatus.WAITING, 
+                AppointmentStatus.READY
+            ])
+        )
+    )
+    appt_result = await session.execute(appt_stmt)
+    # Guardamos las horas ocupadas en un set para búsquedas O(1) eficientes
+    busy_slots = {row for row in appt_result.scalars().all()}
+
+    # 4. Generar la rejilla de horarios libres dinámicamente
+    available_slots = []
+    
+    # Convertimos time a datetime interno para poder sumarle minutos con timedelta
+    current_dt = datetime.combine(selected_date, availability.start_time)
+    end_dt = datetime.combine(selected_date, availability.end_time)
+    slot_duration = timedelta(minutes=availability.slot_duration_minutes)
+
+    # Bucle para fraccionar el rango de atención en bloques
+    while current_dt + slot_duration <= end_dt:
+        slot_time = current_dt.time()
+        
+        # Si la hora actual no está en el grupo de citas ocupadas, está disponible!
+        if slot_time not in busy_slots:
+            available_slots.append({
+                "id": f"{selected_date}_{slot_time.strftime('%H:%M')}",  # ID dinámico para el frontend
+                "scheduled_date": selected_date.isoformat(),
+                "scheduled_time": slot_time.strftime("%H:%M"),
+                "is_available": True
+            })
+            
+        current_dt += slot_duration
+
+    return available_slots
 
 
 async def get_available_specialties(session: AsyncSession) -> list[dict]:

@@ -4,6 +4,7 @@ Exposes public endpoints for registration/login and secured endpoints
 for patients to manage their profiles, medical history, and appointments
 """
 
+from datetime import date
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, status
@@ -105,6 +106,34 @@ async def get_patient_doctors(
 ):
     """Provides the list of active doctors, optionally filtered by specialty."""
     return await valcare_service.get_available_doctors(session, specialty_id)
+
+
+@router.get(
+    "/schedules",
+    status_code=status.HTTP_200_OK,
+    summary="Get available time slots for a doctor on a specific date"
+)
+async def get_doctor_schedules(
+    doctor_id: UUID,
+    date: date,
+    session: AsyncSession = Depends(get_db)
+):
+    """
+    Returns the available time slots for a specific doctor on a given date.
+    The slots are calculated dynamically based on:
+    - Doctor's weekly availability rules (DoctorAvailability)
+    - Slot duration configured for that doctor
+    - Appointments already booked for that date
+    
+    Query Parameters:
+    - doctor_id: UUID of the doctor
+    - date: Date in format YYYY-MM-DD (e.g., 2026-07-05)
+    """
+    return await valcare_service.get_available_schedules(
+        session=session,
+        doctor_id=doctor_id,
+        selected_date=date
+    )
 
 
 @router.post(
