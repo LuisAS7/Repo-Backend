@@ -52,3 +52,4 @@ async def database_health(db: AsyncSession = Depends(get_db)):
 async def protected_test(token: str = Depends(oauth2_scheme)):
     """Temporary endpoint to verify if the JWT lock works perfectly"""
     return {"status": "success", "message": "Access granted! Your JWT token is valid.", "received_token": token}
+
