@@ -16,7 +16,9 @@ from app.schemas.appointments_schema import (
     AppointmentResponse,
     ConsultationCreate,
     ConsultationResponse,
-    WalkInCreate
+    WalkInCreate,
+    DoctorAvailabilityCreate,
+    DoctorAvailabilityResponse
 )
 from app.services import appointments_service
 
@@ -123,3 +125,21 @@ async def create_consultation(
     return await appointments_service.create_consultation(
         session=session, appointment_id=appointment_id, consultation_in=payload, doctor_id=current_user.id
     )
+
+@router.post(
+    "/availability", 
+    response_model=DoctorAvailabilityResponse, 
+    status_code=status.HTTP_201_CREATED,
+    summary="Registrar o actualizar un bloque de disponibilidad para un doctor"
+)
+async def create_doctor_availability(
+    availability_in: DoctorAvailabilityCreate,
+    session: AsyncSession = Depends(get_db),
+    current_user: Staff = Depends(RoleChecker([StaffRole.ADMIN, StaffRole.DOCTOR]))
+):
+    """
+    Permite a un Administrador o al propio Doctor registrar sus ventanas de atención semanales.
+    """
+    # En tu backend puedes implementar una pequeña función 'create_availability' si aún no existe,
+    # o mapear directamente la inserción usando tu modelo DoctorAvailability aquí.
+    return await appointments_service.create_availability(session, availability_in)
