@@ -164,3 +164,20 @@ async def book_appointment(
     )
 
     return await appointments_service.create_appointment(session, appointment_in)
+
+@router.get(
+    "/doctors/{doctor_id}/workdays",
+    status_code=status.HTTP_200_OK,
+    summary="Get workdays of the week for a specific doctor"
+)
+async def get_doctor_days(
+    doctor_id: UUID,
+    session: AsyncSession = Depends(get_db),
+    current_patient: Patient = Depends(get_current_patient)
+):
+    """
+    Retorna los días de la semana (1=Lunes, 7=Domingo) en los que el doctor trabaja.
+    Ideal para deshabilitar días en el DatePicker / Calendario del Frontend.
+    """
+    days = await appointments_service.get_doctor_workdays(session, doctor_id)
+    return {"doctor_id": doctor_id, "workdays": days}
