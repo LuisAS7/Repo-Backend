@@ -45,8 +45,9 @@ async def create_patient(
 async def get_patient(
     patient_id: UUID,
     session: AsyncSession = Depends(get_db),
-    current_user: Staff = Depends(RoleChecker([StaffRole.ADMIN, StaffRole.DOCTOR, StaffRole.NURSE, StaffRole.RECEPTIONIST])),
-
+    current_user: Staff = Depends(
+        RoleChecker([StaffRole.ADMIN, StaffRole.DOCTOR, StaffRole.NURSE, StaffRole.RECEPTIONIST])
+    ),
 ):
     """
     Retrieves a specific patient by their UUID including all nested data
@@ -64,7 +65,9 @@ async def get_all_patients(
     skip: int = Query(0, ge=0, description="Number of records to skip for pagination"),
     limit: int = Query(50, ge=1, le=100, description="Maximum number of records to return"),
     session: AsyncSession = Depends(get_db),
-    current_user: Staff = Depends(RoleChecker([StaffRole.ADMIN, StaffRole.DOCTOR, StaffRole.NURSE, StaffRole.RECEPTIONIST])),
+    current_user: Staff = Depends(
+        RoleChecker([StaffRole.ADMIN, StaffRole.DOCTOR, StaffRole.NURSE, StaffRole.RECEPTIONIST])
+    ),
 ):
     """
     Retrieves a paginated list of all registered patients
@@ -82,7 +85,9 @@ async def update_patient(
     patient_id: UUID,
     patient_in: PatientUpdate,
     session: AsyncSession = Depends(get_db),
-    current_user: Staff = Depends(RoleChecker([StaffRole.ADMIN, StaffRole.DOCTOR, StaffRole.NURSE])),
+    current_user: Staff = Depends(
+        RoleChecker([StaffRole.ADMIN, StaffRole.DOCTOR, StaffRole.NURSE, StaffRole.RECEPTIONIST])
+    ),
 ):
     """
     Partially updates an existing patient's administrative or personal information.
@@ -101,7 +106,9 @@ async def change_patient_status(
     patient_id: UUID,
     payload: PatientStatusUpdate,
     session: AsyncSession = Depends(get_db),
-    current_user: Staff = Depends(RoleChecker([StaffRole.ADMIN, StaffRole.DOCTOR, StaffRole.NURSE])),
+    current_user: Staff = Depends(
+        RoleChecker([StaffRole.ADMIN, StaffRole.DOCTOR, StaffRole.NURSE, StaffRole.RECEPTIONIST])
+    ),
 ):
     """
     Performs a logical soft delete or reactivation by toggling the is_active flag.
