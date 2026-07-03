@@ -22,8 +22,8 @@ __all__ = [
     "PastAppointmentError",
     "InvalidDoctorProfileError",
     "InvalidCatalogReferenceError",
+    "DoctorNotAvailableError",
 ]
-
 
 class BaseBusinessException(Exception):
     """
@@ -108,3 +108,7 @@ class PastAppointmentError(ValidationError):
 class InvalidAppointmentStateTransitionError(ValidationError):
     def __init__(self, current_status: str, target_status: str):
         super().__init__(f"Cannot transition appointment from {current_status} to {target_status}")
+
+class DoctorNotAvailableError(ValidationError):
+    def __init__(self, doctor_id: str, day_of_week: int):
+        super().__init__(f"The doctor is not available on day of week {day_of_week} or within the requested time range")
