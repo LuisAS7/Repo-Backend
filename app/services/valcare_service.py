@@ -99,68 +99,43 @@ async def authenticate_patient(session: AsyncSession, email: str, password: str)
     return patient.id
 
 
-async def get_available_schedules(
-    session: AsyncSession, doctor_id: UUID, selected_date: date
-) -> list[dict]:
+async def get_available_schedules(session: AsyncSession, doctor_id: UUID, selected_date: date) -> list[str]:
     """
-    Genera de forma dinámica los slots libres del doctor calculando su disponibilidad
-    semanal y restando las citas que ya se encuentran ocupadas.
+    Lógica interna que consume el endpoint /valcare/schedules
     """
-    # 1. Obtener el día de la semana (SQLAlchemy guarda 1=Lunes, 7=Domingo)
-    # .isoweekday() de Python devuelve justamente 1 para Lunes y 7 para Domingo
+    # 1. Obtener el día de la semana (1=Lunes, 7=Domingo)
     day_of_week = selected_date.isoweekday()
 
-    # 2. Consultar la disponibilidad configurada para ese día
-    avail_stmt = select(DoctorAvailability).where(
-        and_(
-            DoctorAvailability.doctor_id == doctor_id,
-            DoctorAvailability.day_of_week == day_of_week
-        )
+    # 2. Buscar la regla de disponibilidad del médico para ese día de la semana
+    stmt_avail = select(DoctorAvailability).where(
+        DoctorAvailability.doctor_id == doctor_id,
+        DoctorAvailability.day_of_week == day_of_week
     )
-    avail_result = await session.execute(avail_stmt)
-    availability = avail_result.scalar_one_or_none()
+    res_avail = await session.execute(stmt_avail)
+    availability = res_avail.scalar_one_or_none()
 
-    # Si el médico no atiende este día de la semana, regresamos lista vacía
     if not availability:
-        return []
+        return []  # No atiende ese día
 
-    # 3. Consultar qué citas ya están ocupadas/reservadas para ese médico en esa fecha
-    appt_stmt = select(Appointment.scheduled_time).where(
-        and_(
-            Appointment.doctor_id == doctor_id,
-            Appointment.scheduled_date == selected_date,
-            Appointment.status.in_([
-                AppointmentStatus.SCHEDULED, 
-                AppointmentStatus.WAITING, 
-                AppointmentStatus.READY
-            ])
-        )
+    # 3. Buscar citas que ya existan para ese médico en esa fecha específica
+    stmt_appt = select(Appointment.scheduled_time).where(
+        Appointment.doctor_id == doctor_id,
+        Appointment.scheduled_date == selected_date,
+        Appointment.status.in_([AppointmentStatus.SCHEDULED, AppointmentStatus.WAITING, AppointmentStatus.READY])
     )
-    appt_result = await session.execute(appt_stmt)
-    # Guardamos las horas ocupadas en un set para búsquedas O(1) eficientes
-    busy_slots = {row for row in appt_result.scalars().all()}
+    res_appt = await session.execute(stmt_appt)
+    occupied_slots = {row for row in res_appt.scalars().all()}
 
-    # 4. Generar la rejilla de horarios libres dinámicamente
+    # 4. Segmentar el tiempo en bloques dinámicos (slots)
     available_slots = []
-    
-    # Convertimos time a datetime interno para poder sumarle minutos con timedelta
     current_dt = datetime.combine(selected_date, availability.start_time)
     end_dt = datetime.combine(selected_date, availability.end_time)
     slot_duration = timedelta(minutes=availability.slot_duration_minutes)
 
-    # Bucle para fraccionar el rango de atención en bloques
     while current_dt + slot_duration <= end_dt:
         slot_time = current_dt.time()
-        
-        # Si la hora actual no está en el grupo de citas ocupadas, está disponible!
-        if slot_time not in busy_slots:
-            available_slots.append({
-                "id": f"{selected_date}_{slot_time.strftime('%H:%M')}",  # ID dinámico para el frontend
-                "scheduled_date": selected_date.isoformat(),
-                "scheduled_time": slot_time.strftime("%H:%M"),
-                "is_available": True
-            })
-            
+        if slot_time not in occupied_slots:
+            available_slots.append(slot_time.strftime("%H:%M"))
         current_dt += slot_duration
 
     return available_slots
