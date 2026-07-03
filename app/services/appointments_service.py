@@ -15,10 +15,10 @@ from app.core.exceptions import (
     AppointmentNotFoundError,
     BaseBusinessException,
     DoubleBookingError,
-    PastAppointmentError,
+    DoctorNotAvailableError,
 )
-from app.models.appointments import Appointment, AppointmentStatus, AppointmentOrigin, Consultation, DiagnosisCatalog, Prescription
-from app.schemas.appointments_schema import AppointmentCreate, ConsultationCreate, WalkInCreate
+from app.models.appointments import Appointment, AppointmentStatus, AppointmentOrigin, Consultation, DiagnosisCatalog, Prescription, DoctorAvailability
+from app.schemas.appointments_schema import AppointmentCreate, ConsultationCreate, WalkInCreate, DoctorAvailabilityCreate
 
 
 async def get_appointment_by_id(session: AsyncSession, appointment_id: UUID) -> Appointment:
@@ -50,12 +50,51 @@ async def create_appointment(session: AsyncSession, appointment_create: Appointm
     Validates logical dates and ensures the doctor is not double-booked
     """
     # Temporal Logic Validation
-    now = datetime.now()
-    if appointment_create.scheduled_date < now.date():
-        raise PastAppointmentError()
+    # Convertimos el día de la semana (ISO: Lunes=1, Domingo=7)
+    day_of_week_sql = appointment_create.scheduled_date.isoweekday()
+    
+    # Buscamos la regla de disponibilidad que calce con el día y la ventana de atención
+    avail_stmt = select(DoctorAvailability).where(
+        and_(
+            DoctorAvailability.doctor_id == appointment_create.doctor_id,
+            DoctorAvailability.day_of_week == day_of_week_sql,
+            DoctorAvailability.start_time <= appointment_create.scheduled_time,
+            DoctorAvailability.end_time > appointment_create.scheduled_time
+        )
+    )
+    avail_result = await session.execute(avail_stmt)
+    availability = avail_result.scalar_one_or_none()
 
-    if appointment_create.scheduled_date == now.date() and appointment_create.scheduled_time < now.time():
-        raise PastAppointmentError()
+    if not availability:
+        raise DoctorNotAvailableError(str(appointment_create.doctor_id), day_of_week_sql)
+
+    # 2. Prevent Double Booking (Buscar si ya está ocupado ese slot)
+    stmt = select(Appointment).where(
+        and_(
+            Appointment.doctor_id == appointment_create.doctor_id,
+            Appointment.scheduled_date == appointment_create.scheduled_date,
+            Appointment.scheduled_time == appointment_create.scheduled_time,
+            Appointment.status.in_([AppointmentStatus.SCHEDULED, AppointmentStatus.WAITING, AppointmentStatus.READY]),
+        )
+    )
+    result = await session.execute(stmt)
+    if result.scalar_one_or_none():
+        raise DoubleBookingError()
+
+    # 3. Data preparation and insertion
+    appointment_data = appointment_create.model_dump()
+    new_appointment = Appointment(**appointment_data)
+
+    try:
+        session.add(new_appointment)
+        await session.commit()  # Commit to generate the ID
+    except Exception as e:
+        await session.rollback()
+        if isinstance(e, BaseBusinessException):
+            raise
+        raise e
+
+    return await get_appointment_by_id(session, new_appointment.id)
 
     # Prevent Double Booking
     # Search for an active appointment with the same doctor, date, and time
@@ -208,7 +247,6 @@ async def create_consultation(
 async def create_walk_in(session: AsyncSession, walk_in_data: WalkInCreate) -> Appointment:
     """
     Creates a walk-in appointment without a doctor assigned.
-    Sets status to WAITING directly since the patient is already present.
     """
     new_appointment = Appointment(
         patient_id=walk_in_data.patient_id,
@@ -228,3 +266,49 @@ async def create_walk_in(session: AsyncSession, walk_in_data: WalkInCreate) -> A
         raise e
 
     return await get_appointment_by_id(session, new_appointment.id)
+
+
+async def get_doctor_workdays(session: AsyncSession, doctor_id: UUID) -> list[int]:
+    """
+    Retorna los números de los días de la semana (1-7) en los que el doctor registra atención.
+    """
+    stmt = (
+        select(DoctorAvailability.day_of_week)
+        .where(DoctorAvailability.doctor_id == doctor_id)
+        .order_by(DoctorAvailability.day_of_week.asc())
+    )
+    result = await session.execute(stmt)
+    return list(result.scalars().all())
+
+async def create_availability(session: AsyncSession, availability_in: DoctorAvailabilityCreate) -> DoctorAvailability:
+    """
+    Guarda o actualiza una regla de disponibilidad semanal para un médico en la base de datos.
+    """
+    # Verificamos si ya existe una regla para ese doctor el mismo día de la semana
+    stmt = select(DoctorAvailability).where(
+        and_(
+            DoctorAvailability.doctor_id == availability_in.doctor_id,
+            DoctorAvailability.day_of_week == availability_in.day_of_week
+        )
+    )
+    result = await session.execute(stmt)
+    existing_availability = result.scalar_one_or_none()
+
+    if existing_availability:
+        # Si ya existe, actualizamos los rangos de horas
+        existing_availability.start_time = availability_in.start_time
+        existing_availability.end_time = availability_in.end_time
+        existing_availability.slot_duration_minutes = availability_in.slot_duration_minutes
+        db_obj = existing_availability
+    else:
+        # Si es nuevo, instanciamos el modelo ORM
+        db_obj = DoctorAvailability(**availability_in.model_dump())
+        session.add(db_obj)
+
+    try:
+        await session.commit()
+        await session.refresh(db_obj)
+        return db_obj
+    except Exception as e:
+        await session.rollback()
+        raise e
