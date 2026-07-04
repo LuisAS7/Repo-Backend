@@ -49,6 +49,10 @@ async def create_triage(db: AsyncSession, appointment_id: UUID, triage_data: Tri
     ]:
         raise ValidationError(detail="Invalid appointment state for Triage")
 
+    triage_existente = await get_triage_by_appointment(db, appointment_id)
+    if triage_existente:
+        raise ValidationError("Esta cita ya cuenta con un Triage registrado")
+
     # Explicit logic: Avoid division by zero if height_cm = 0 is provided in tests
     if triage_data.weight_kg and triage_data.height_cm and triage_data.height_cm > 0:
         height_meters = triage_data.height_cm / Decimal("100")
