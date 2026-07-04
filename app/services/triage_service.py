@@ -5,17 +5,15 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.future import select
 
 # Import custom business exceptions
-from app.core.exceptions import BaseBusinessException
+from app.core.exceptions import NotFoundError, ValidationError
 from app.models.appointments import Appointment, AppointmentStatus, Triage
 from app.schemas.appointments_schema import TriageCreate, TriageUpdate
 
 
 # 💡 Local exception definition (can be moved to app.core.exceptions)
-class TriageNotFoundError(BaseBusinessException):
+class TriageNotFoundError(NotFoundError):
     def __init__(self, detail: str = "Triage record not found for this appointment"):
-        self.status_code = 404
-        self.detail = detail
-        super().__init__(self.detail)
+        super().__init__(detail)
 
 
 # ---------------------------------------------------------------------------
@@ -44,8 +42,12 @@ async def create_triage(db: AsyncSession, appointment_id: UUID, triage_data: Tri
     stmt_app = select(Appointment).where(Appointment.id == appointment_id)
     appointment = (await db.execute(stmt_app)).scalar_one_or_none()
 
-    if not appointment or appointment.status not in [AppointmentStatus.SCHEDULED, AppointmentStatus.READY]:
-        raise BaseBusinessException(status_code=400, detail="Invalid appointment state for Triage")
+    if not appointment or appointment.status not in [
+        AppointmentStatus.SCHEDULED,
+        AppointmentStatus.READY,
+        AppointmentStatus.WAITING,
+    ]:
+        raise ValidationError(detail="Invalid appointment state for Triage")
 
     # Explicit logic: Avoid division by zero if height_cm = 0 is provided in tests
     if triage_data.weight_kg and triage_data.height_cm and triage_data.height_cm > 0:
