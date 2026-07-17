@@ -17,7 +17,7 @@ from app.models.appointments import AppointmentOrigin, AppointmentStatus
 from app.models.patients import Patient
 from app.schemas.appointments_schema import AppointmentCreate, AppointmentResponse
 from app.schemas.valcare_schema import ValcareAppointmentBooking, ValcareProfileResponse, ValcareRegisterRequest
-from app.services import appointments_service, valcare_service
+from app.services import appointments_service, scheduling_service, valcare_service
 
 router = APIRouter(prefix="/valcare", tags=["ValCare Portal (Patients)"])
 
@@ -95,7 +95,7 @@ async def get_patient_specialties(
     current_patient: Patient = Depends(get_current_patient),
 ):
     """Provides the list of medical specialties to the patient portal."""
-    return await valcare_service.get_available_specialties(session)
+    return await scheduling_service.get_available_specialties(session)
 
 
 @router.get("/doctors", status_code=status.HTTP_200_OK, summary="List doctors available for patient booking")
@@ -105,35 +105,25 @@ async def get_patient_doctors(
     current_patient: Patient = Depends(get_current_patient),
 ):
     """Provides the list of active doctors, optionally filtered by specialty."""
-    return await valcare_service.get_available_doctors(session, specialty_id)
+    return await scheduling_service.get_available_doctors(session, specialty_id)
 
 
 @router.get(
-    "/schedules",
-    status_code=status.HTTP_200_OK,
-    summary="Get available time slots for a doctor on a specific date"
+    "/schedules", status_code=status.HTTP_200_OK, summary="Get available time slots for a doctor on a specific date"
 )
-async def get_doctor_schedules(
-    doctor_id: UUID,
-    date: date,
-    session: AsyncSession = Depends(get_db)
-):
+async def get_doctor_schedules(doctor_id: UUID, date: date, session: AsyncSession = Depends(get_db)):
     """
     Returns the available time slots for a specific doctor on a given date.
     The slots are calculated dynamically based on:
     - Doctor's weekly availability rules (DoctorAvailability)
     - Slot duration configured for that doctor
     - Appointments already booked for that date
-    
+
     Query Parameters:
     - doctor_id: UUID of the doctor
     - date: Date in format YYYY-MM-DD (e.g., 2026-07-05)
     """
-    return await valcare_service.get_available_schedules(
-        session=session,
-        doctor_id=doctor_id,
-        selected_date=date
-    )
+    return await scheduling_service.get_available_schedules(session=session, doctor_id=doctor_id, selected_date=date)
 
 
 @router.post(
